@@ -143,16 +143,14 @@ describe('Query Builder - Select Tests', () => {
         user => user.id,
         order => order.userId,
         (user, order) => ({
-          userId: user.id,
-          orderId: order.id,
           user,
           order,
         }),
       )
       .join(
         uni,
-        joined => joined.orderId, // Usar a propriedade diretamente
-        uni => uni.userId,
+        joined => joined.order.id,
+        uni => uni.orderId,
         (joined, uni) => ({
           ...joined,
           uni,
@@ -162,7 +160,50 @@ describe('Query Builder - Select Tests', () => {
 
     // Assert
     expect(normalizeSQL(query)).toContain(
-      normalizeSQL(`SELECT * FROM users AS u INNER JOIN orders AS o ON (u.id = o.userId)`),
+      normalizeSQL(`SELECT *
+        FROM users AS u
+        INNER JOIN orders AS o ON (u.id = o.userId)
+        INNER JOIN unis AS u1 ON (o.id = u1.orderId)`),
+    );
+  });
+
+  test('Select with join e seletor de colunas', () => {
+    // Arrange
+    const users = dbContext.set<User>('users');
+    const orders = dbContext.set<Order>('orders');
+    const uni = dbContext.set('unis');
+
+    // Act
+    const query = users
+      .join(
+        orders,
+        user => user.id,
+        order => order.userId,
+        (user, order) => ({
+          user,
+          order,
+        }),
+      )
+      .join(
+        uni,
+        joined => joined.order.id,
+        uni => uni.orderId,
+        (joined, uni) => ({
+          ...joined,
+          uni,
+        }),
+      )
+      .select(joined => ({
+        amount: joined.order.amount,
+      }))
+      .toQueryString();
+
+    // Assert
+    expect(normalizeSQL(query)).toContain(
+      normalizeSQL(`SELECT o.amount
+        FROM users AS u
+        INNER JOIN orders AS o ON (u.id = o.userId)
+        INNER JOIN unis AS u1 ON (o.id = u1.orderId)`),
     );
   });
 });

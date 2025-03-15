@@ -1,45 +1,73 @@
+// src/core/query/LambdaParser.ts (aprimorado)
 import * as ts from 'typescript';
 import { Expression, ExpressionType } from '../expressions/Expression';
 import { ExpressionBuilder } from './ExpressionBuilder';
+import { PropertyTracker } from './PropertyTracker';
+import { ColumnExpression } from '../expressions/ColumnExpression';
 
 /**
- * Parses TypeScript lambda expressions into expression trees
+ * Interface que representa um resultado de mapeamento de propriedade
+ */
+export interface PropertyMapping {
+  /** Nome da propriedade no resultado */
+  propertyName: string;
+  /** Expressão associada à propriedade */
+  expression: Expression;
+  /** Alias da tabela de origem (se conhecido) */
+  tableAlias?: string;
+  /** Nome da coluna na tabela (se conhecido) */
+  columnName?: string;
+  /** Caminho de propriedade para objetos aninhados */
+  propertyPath?: string[];
+  /** Se é uma expressão complexa (não um simples acesso a coluna) */
+  isComplex: boolean;
+}
+
+/**
+ * Analisa expressões lambda TypeScript em árvores de expressões
  */
 export class LambdaParser {
   private readonly builder: ExpressionBuilder;
   private readonly variables: Record<string, any>;
   private parameterName: string = '';
+  private readonly propertyTracker?: PropertyTracker;
 
   /**
-   * Creates a new lambda parser
-   * @param builder The expression builder to use
-   * @param variables Variables that can be used in the lambda
+   * Cria um novo analisador lambda
+   * @param builder O construtor de expressões a ser usado
+   * @param variables Variáveis que podem ser usadas no lambda
+   * @param propertyTracker Opcional - rastreador de propriedades para referência
    */
-  constructor(builder: ExpressionBuilder, variables: Record<string, any> = {}) {
+  constructor(
+    builder: ExpressionBuilder,
+    variables: Record<string, any> = {},
+    propertyTracker?: PropertyTracker,
+  ) {
     this.builder = builder;
     this.variables = variables;
+    this.propertyTracker = propertyTracker;
   }
 
   /**
-   * Parses a predicate function into an expression tree
-   * @param predicate The predicate function (e.g., x => x.id === 1)
-   * @param tableAlias The alias for the table
+   * Analisa uma função de predicado em uma árvore de expressões
+   * @param predicate A função de predicado (por exemplo, x => x.id === 1)
+   * @param tableAlias O alias para a tabela
    */
   parsePredicate<T>(predicate: (entity: T) => boolean, tableAlias: string): Expression {
     const fnString = predicate.toString();
     this.extractParameterName(fnString);
 
-    // Parse the function body into an AST
+    // Analisar o corpo da função em uma AST
     const node = this.parseLambda(fnString);
 
-    // Convert the AST to an expression tree
+    // Converter a AST em uma árvore de expressões
     return this.processNode(node, tableAlias);
   }
 
   /**
-   * Parses a selector function into an object with column mappings
-   * @param selector The selector function (e.g., x => ({ id: x.id, name: x.name }))
-   * @param tableAlias The alias for the table
+   * Analisa uma função seletora em um objeto com mapeamentos de colunas
+   * @param selector A função seletora (por exemplo, x => ({ id: x.id, name: x.name }))
+   * @param tableAlias O alias para a tabela
    */
   parseSelector<T, TResult>(
     selector: (entity: T) => TResult,
@@ -48,63 +76,83 @@ export class LambdaParser {
     const fnString = selector.toString();
     this.extractParameterName(fnString);
 
-    // Parse the function body into an AST
+    // Analisar o corpo da função em uma AST
     const node = this.parseLambda(fnString);
 
-    // Convert the AST to a map of property name -> expression
+    // Converter a AST em um mapa de nome da propriedade -> expressão
     return this.processProjection(node, tableAlias);
   }
 
   /**
-   * Extracts the parameter name from a lambda function string
-   * @param fnString The function string
+   * Analisa uma função seletora com suporte melhorado a propriedades aninhadas
+   * @param selector A função seletora
+   * @param tableAlias O alias da tabela principal
+   * @returns Um mapa de PropertyMapping para cada propriedade
+   */
+  parseSelectorEnhanced<T, TResult>(
+    selector: (entity: T) => TResult,
+    tableAlias: string,
+  ): Map<string, PropertyMapping> {
+    const fnString = selector.toString();
+    this.extractParameterName(fnString);
+
+    // Analisar o corpo da função em uma AST
+    const node = this.parseLambda(fnString);
+
+    // Converter a AST em um mapa de PropertyMapping
+    return this.processProjectionEnhanced(node, tableAlias);
+  }
+
+  /**
+   * Extrai o nome do parâmetro de uma string de função lambda
+   * @param fnString A string da função
    */
   private extractParameterName(fnString: string): void {
-    // Match parameter patterns:
-    // 1. Arrow function: (x) => ... or x => ...
-    // 2. Function expression: function(x) { ... }
+    // Corresponder padrões de parâmetros:
+    // 1. Função de seta: (x) => ... ou x => ...
+    // 2. Expressão de função: function(x) { ... }
     const paramMatch = fnString.match(/\(\s*([^)]*)\s*\)\s*=>|\s*(\w+)\s*=>/);
 
     if (paramMatch) {
-      // Use the captured parameter name
+      // Usar o nome do parâmetro capturado
       this.parameterName = (paramMatch[1] || paramMatch[2]).trim();
     } else {
-      // Default parameter name if we couldn't extract it
+      // Nome de parâmetro padrão se não pudermos extraí-lo
       this.parameterName = 'entity';
     }
   }
 
   /**
-   * Parses a lambda function string into an AST
-   * @param fnString The function string
+   * Analisa uma string de função lambda em uma AST
+   * @param fnString A string da função
    */
   private parseLambda(fnString: string): ts.Node {
-    // Determine if this is an arrow function or function expression
+    // Determinar se esta é uma função de seta ou expressão de função
     const isArrow = fnString.includes('=>');
 
-    // Extract the function body
+    // Extrair o corpo da função
     let functionBody = '';
 
     if (isArrow) {
-      // Arrow function: extract everything after =>
+      // Função de seta: extrair tudo após =>
       const bodyStart = fnString.indexOf('=>') + 2;
       functionBody = fnString.substring(bodyStart).trim();
 
-      // If the body doesn't start with {, wrap it with return
+      // Se o corpo não começa com {, envolvê-lo com return
       if (!functionBody.startsWith('{')) {
         functionBody = `return ${functionBody}`;
       } else {
-        // Remove the outer {}
+        // Remover as {} externas
         functionBody = functionBody.substring(1, functionBody.length - 1).trim();
       }
     } else {
-      // Function expression: extract everything between { and }
+      // Expressão de função: extrair tudo entre { e }
       const bodyStart = fnString.indexOf('{') + 1;
       const bodyEnd = fnString.lastIndexOf('}');
       functionBody = fnString.substring(bodyStart, bodyEnd).trim();
     }
 
-    // Create a source file for parsing
+    // Criar um arquivo fonte para análise
     const sourceFile = ts.createSourceFile(
       'expression.ts',
       functionBody,
@@ -112,17 +160,17 @@ export class LambdaParser {
       true,
     );
 
-    // Return the first statement of the function body
+    // Retornar a primeira declaração do corpo da função
     return sourceFile.statements[0];
   }
 
   /**
-   * Processes an AST node and converts it to an expression tree
-   * @param node The AST node
-   * @param tableAlias The alias for the table
+   * Processa um nó de AST e o converte em uma árvore de expressões
+   * @param node O nó de AST
+   * @param tableAlias O alias para a tabela
    */
   private processNode(node: ts.Node, tableAlias: string): Expression {
-    // Process different types of nodes
+    // Processar diferentes tipos de nós
     if (ts.isExpressionStatement(node)) {
       return this.processNode(node.expression, tableAlias);
     }
@@ -159,30 +207,602 @@ export class LambdaParser {
       return this.processNode(node.expression, tableAlias);
     }
 
-    // Default: convert to a constant
+    // Padrão: converter para uma constante
     return this.builder.createConstant(node.getText());
   }
 
   /**
-   * Processes a binary expression node
-   * @param node The binary expression node
-   * @param tableAlias The alias for the table
+   * Processa uma projeção aprimorada com suporte a propriedades aninhadas
+   * @param node O nó AST
+   * @param tableAlias O alias da tabela
+   */
+  private processProjectionEnhanced(
+    node: ts.Node,
+    tableAlias: string,
+  ): Map<string, PropertyMapping> {
+    const result = new Map<string, PropertyMapping>();
+
+    // Encontrar a expressão literal de objeto no corpo da função
+    let objectLiteral: ts.ObjectLiteralExpression | null = null;
+
+    // Função para procurar recursivamente um literal de objeto
+    const findObjectLiteral = (node: ts.Node): ts.ObjectLiteralExpression | null => {
+      if (ts.isObjectLiteralExpression(node)) {
+        return node;
+      }
+
+      if (ts.isExpressionStatement(node) && ts.isObjectLiteralExpression(node.expression)) {
+        return node.expression;
+      }
+
+      if (
+        ts.isReturnStatement(node) &&
+        node.expression &&
+        ts.isObjectLiteralExpression(node.expression)
+      ) {
+        return node.expression;
+      }
+
+      if (ts.isParenthesizedExpression(node) && ts.isObjectLiteralExpression(node.expression)) {
+        return node.expression;
+      }
+
+      // Para funções de seta com retorno implícito de literais de objeto
+      if (ts.isArrowFunction(node) && node.body && ts.isObjectLiteralExpression(node.body)) {
+        return node.body;
+      }
+
+      // Busca recursiva em filhos
+      let found: ts.ObjectLiteralExpression | null = null;
+      node.forEachChild(child => {
+        if (!found) {
+          found = findObjectLiteral(child);
+        }
+      });
+
+      return found;
+    };
+
+    objectLiteral = findObjectLiteral(node);
+
+    if (!objectLiteral) {
+      throw new Error('Esperava-se uma expressão literal de objeto na função select');
+    }
+
+    // Processar cada propriedade no literal de objeto
+    for (const property of objectLiteral.properties) {
+      if (ts.isPropertyAssignment(property) && ts.isIdentifier(property.name)) {
+        const propertyName = property.name.text;
+
+        // Processar a inicialização da propriedade
+        const expressionResult = this.processPropertyInitializer(property.initializer, tableAlias);
+
+        result.set(propertyName, {
+          propertyName,
+          expression: expressionResult.expression,
+          tableAlias: expressionResult.tableAlias,
+          columnName: expressionResult.columnName,
+          propertyPath: expressionResult.propertyPath,
+          isComplex: expressionResult.isComplex,
+        });
+      }
+    }
+
+    return result;
+  }
+
+  /**
+   * Processa um inicializador de propriedade, extraindo informações sobre a origem
+   * @param node O nó do inicializador
+   * @param defaultTableAlias O alias padrão da tabela
+   */
+  private processPropertyInitializer(
+    node: ts.Expression,
+    defaultTableAlias: string,
+  ): PropertyMapping {
+    let expression: Expression;
+    let tableAlias = defaultTableAlias;
+    let columnName: string | undefined;
+    let propertyPath: string[] | undefined;
+    let isComplex = false;
+
+    if (ts.isPropertyAccessExpression(node)) {
+      // Caso como: entity.propertyName ou obj.nested.prop
+
+      // Extrair o caminho completo da propriedade
+      const propPath = this.extractPropertyPath(node);
+
+      if (propPath.length > 0) {
+        // O primeiro elemento pode ser o parâmetro ou uma variável
+        const firstElement = propPath[0];
+
+        if (firstElement === this.parameterName) {
+          // É um acesso direto à propriedade do parâmetro lambda
+          // Por exemplo: user.name
+          columnName = propPath[propPath.length - 1];
+
+          if (propPath.length > 2) {
+            // Há propriedades aninhadas, como user.address.city
+            propertyPath = propPath.slice(1);
+
+            // Verificar se temos informações sobre a tabela para propriedades aninhadas
+            if (this.propertyTracker && propPath.length > 2) {
+              const nestedProp = propPath[1];
+              const source = this.propertyTracker.getPropertySource(nestedProp);
+
+              if (source) {
+                tableAlias = source.tableAlias;
+              }
+            }
+          }
+
+          expression = this.builder.createColumn(columnName, tableAlias);
+        } else if (firstElement in this.variables) {
+          // É uma variável de contexto
+          isComplex = true;
+          expression = this.builder.createConstant(this.variables[firstElement]);
+        } else if (this.propertyTracker && this.propertyTracker.hasProperty(firstElement)) {
+          // É uma propriedade registrada (possivelmente de um join)
+          const source = this.propertyTracker.getPropertySource(firstElement);
+
+          if (source) {
+            tableAlias = source.tableAlias;
+
+            if (propPath.length > 1) {
+              // É um acesso a uma subpropriedade, como order.detail
+              columnName = propPath[propPath.length - 1];
+              propertyPath = propPath;
+            } else {
+              // É apenas a propriedade direta
+              columnName = source.columnName;
+            }
+
+            expression = this.builder.createColumn(columnName!, tableAlias);
+          } else {
+            // Fallback para coluna simples
+            columnName = propPath[propPath.length - 1];
+            expression = this.builder.createColumn(columnName, tableAlias);
+          }
+        } else {
+          // Fallback para coluna simples
+          columnName = propPath[propPath.length - 1];
+          expression = this.builder.createColumn(columnName, tableAlias);
+        }
+      } else {
+        // Não foi possível extrair o caminho da propriedade, usar o nó como está
+        columnName = node.getText();
+        expression = this.builder.createColumn(columnName, tableAlias);
+      }
+    } else if (ts.isIdentifier(node)) {
+      // Caso como: propertyName (sem qualificador)
+      const name = node.text;
+
+      if (name === this.parameterName) {
+        // Referência ao parâmetro inteiro (raro)
+        isComplex = true;
+        expression = this.builder.createConstant(tableAlias);
+      } else if (name in this.variables) {
+        // É uma variável de contexto
+        isComplex = true;
+        expression = this.builder.createConstant(this.variables[name]);
+      } else if (this.propertyTracker && this.propertyTracker.hasProperty(name)) {
+        // É uma propriedade registrada
+        const source = this.propertyTracker.getPropertySource(name);
+
+        if (source) {
+          tableAlias = source.tableAlias;
+          columnName = source.columnName;
+          expression = this.builder.createColumn(columnName, tableAlias);
+        } else {
+          // Fallback para coluna simples
+          columnName = name;
+          expression = this.builder.createColumn(columnName, tableAlias);
+        }
+      } else {
+        // Assumir que é uma coluna
+        columnName = name;
+        expression = this.builder.createColumn(columnName, tableAlias);
+      }
+    } else if (
+      ts.isBinaryExpression(node) ||
+      ts.isCallExpression(node) ||
+      ts.isConditionalExpression(node)
+    ) {
+      // É uma expressão complexa
+      isComplex = true;
+      expression = this.processNode(node, tableAlias);
+    } else if (ts.isLiteralExpression(node)) {
+      // É um literal (string, número, etc.)
+      isComplex = true;
+      expression = this.processLiteral(node);
+    } else {
+      // Para outros tipos de expressões
+      isComplex = true;
+      expression = this.processNode(node, tableAlias);
+    }
+
+    return {
+      propertyName: '', // Será preenchido pelo chamador
+      expression,
+      tableAlias,
+      columnName,
+      propertyPath,
+      isComplex,
+    };
+  }
+
+  /**
+   * Extrai o caminho completo da propriedade de uma expressão de acesso a propriedade
+   * @param node Nó de expressão de acesso a propriedade
+   * @returns Array com cada parte do caminho (ex: ['user', 'address', 'city'])
+   */
+  private extractPropertyPath(node: ts.PropertyAccessExpression): string[] {
+    const path: string[] = [];
+
+    // Adicionar a propriedade atual
+    path.unshift(node.name.text);
+
+    // Processar recursivamente a expressão à esquerda
+    let current: ts.Expression = node.expression;
+
+    while (current) {
+      if (ts.isPropertyAccessExpression(current)) {
+        path.unshift(current.name.text);
+        current = current.expression;
+      } else if (ts.isIdentifier(current)) {
+        path.unshift(current.text);
+        break;
+      } else {
+        // Não é um caminho de propriedade simples
+        break;
+      }
+    }
+
+    return path;
+  }
+
+  /**
+   * Processa uma expressão de acesso a propriedade
+   * @param node O nó de expressão de acesso a propriedade
+   * @param tableAlias O alias para a tabela
+   */
+  private processPropertyAccess(node: ts.PropertyAccessExpression, tableAlias: string): Expression {
+    // Extrair o caminho completo da propriedade
+    const propPath = this.extractPropertyPath(node);
+
+    // Verificar se este é um acesso a propriedade do nosso parâmetro
+    if (propPath.length > 0 && propPath[0] === this.parameterName) {
+      // É uma referência de coluna
+      const columnName = propPath[propPath.length - 1];
+
+      // Se temos propriedades aninhadas e um rastreador de propriedades
+      if (propPath.length > 2 && this.propertyTracker) {
+        const nestedProp = propPath[1];
+        const source = this.propertyTracker.getPropertySource(nestedProp);
+
+        if (source) {
+          // Usar o alias da tabela associada à primeira parte do caminho aninhado
+          return this.builder.createColumn(columnName, source.tableAlias);
+        }
+      }
+
+      // Caso padrão - usar o alias da tabela atual
+      return this.builder.createColumn(columnName, tableAlias);
+    }
+
+    // Verificar se temos informações no rastreador de propriedades
+    if (propPath.length > 0 && this.propertyTracker) {
+      const firstProp = propPath[0];
+      const source = this.propertyTracker.getPropertySource(firstProp);
+
+      if (source) {
+        // Temos uma fonte para esta propriedade
+        const columnName = propPath[propPath.length - 1];
+        return this.builder.createColumn(columnName, source.tableAlias);
+      }
+    }
+
+    // Caso contrário, tente avaliar a expressão
+    const propertyName = node.name.text;
+    const object = this.evaluateExpression(node.expression);
+
+    if (object !== undefined && object !== null) {
+      // Retornar o valor da propriedade
+      return this.builder.createConstant(object[propertyName]);
+    }
+
+    // Se não pudermos avaliar, criar uma expressão de coluna como fallback
+    // Isso assume que qualquer acesso a propriedade está referenciando uma coluna
+    return this.builder.createColumn(propertyName, tableAlias);
+  }
+
+  /**
+   * Processa uma expressão binária
+   * @param node O nó de expressão binária
+   * @param tableAlias O alias para a tabela
    */
   private processBinaryExpression(node: ts.BinaryExpression, tableAlias: string): Expression {
-    // Get the operator
+    // Obter o operador
     const operator = this.mapBinaryOperator(node.operatorToken.kind);
 
-    // Process left and right operands
+    // Processar operandos à esquerda e à direita
     const left = this.processNode(node.left, tableAlias);
     const right = this.processNode(node.right, tableAlias);
 
-    // Create a binary expression
+    // Criar uma expressão binária
     return this.builder.createBinary(operator, left, right);
   }
 
   /**
-   * Maps a TypeScript binary operator to an expression type
-   * @param kind The TypeScript syntax kind
+   * Processa uma expressão unária de prefixo
+   * @param node O nó de expressão unária de prefixo
+   * @param tableAlias O alias para a tabela
+   */
+  private processPrefixUnaryExpression(
+    node: ts.PrefixUnaryExpression,
+    tableAlias: string,
+  ): Expression {
+    // Obter o operador
+    const operator = this.mapUnaryOperator(node.operator);
+
+    // Processar o operando
+    const operand = this.processNode(node.operand, tableAlias);
+
+    // Criar uma expressão unária
+    return this.builder.createUnary(operator, operand);
+  }
+
+  /**
+   * Processa um identificador
+   * @param node O nó identificador
+   * @param tableAlias O alias para a tabela
+   */
+  private processIdentifier(node: ts.Identifier, tableAlias: string): Expression {
+    const name = node.text;
+
+    // Verificar se este é nosso parâmetro
+    if (name === this.parameterName) {
+      // Esta é uma referência à entidade inteira - não comum em SQL
+      // Por enquanto, apenas retornar uma referência à tabela
+      return this.builder.createConstant(`${tableAlias}`);
+    }
+
+    // Verificar se é uma variável de contexto
+    if (name in this.variables) {
+      // É uma variável, retornar seu valor
+      return this.builder.createConstant(this.variables[name]);
+    }
+
+    // Verificar se temos informações no rastreador de propriedades
+    if (this.propertyTracker) {
+      const source = this.propertyTracker.getPropertySource(name);
+
+      if (source) {
+        // Temos uma fonte para esta propriedade
+        return this.builder.createColumn(source.columnName, source.tableAlias);
+      }
+    }
+
+    // Caso contrário, assumir que é uma coluna (embora isso provavelmente seja um erro)
+    return this.builder.createColumn(name, tableAlias);
+  }
+
+  /**
+   * Processa uma expressão literal
+   * @param node O nó de expressão literal
+   */
+  private processLiteral(node: ts.LiteralExpression): Expression {
+    // Lidar com diferentes tipos de literais
+    if (ts.isStringLiteral(node)) {
+      return this.builder.createConstant(node.text);
+    }
+
+    if (ts.isNumericLiteral(node)) {
+      return this.builder.createConstant(Number(node.text));
+    }
+
+    // Lidar com palavras-chave true/false
+    if (node.kind === ts.SyntaxKind.TrueKeyword) {
+      return this.builder.createConstant(true);
+    }
+
+    if (node.kind === ts.SyntaxKind.FalseKeyword) {
+      return this.builder.createConstant(false);
+    }
+
+    // Lidar com palavra-chave null
+    if (node.kind === ts.SyntaxKind.NullKeyword) {
+      return this.builder.createConstant(null);
+    }
+
+    // Padrão: converter para string
+    return this.builder.createConstant(node.getText());
+  }
+
+  /**
+   * Processa uma expressão de chamada
+   * @param node O nó de expressão de chamada
+   * @param tableAlias O alias para a tabela
+   */
+  private processCallExpression(node: ts.CallExpression, tableAlias: string): Expression {
+    // Lidar com chamadas de método como string.includes(), array.some(), etc.
+    if (ts.isPropertyAccessExpression(node.expression)) {
+      const method = node.expression.name.text;
+      const object = this.processNode(node.expression.expression, tableAlias);
+      const args = node.arguments.map(arg => this.processNode(arg, tableAlias));
+
+      // Lidar com string.includes() -> LIKE
+      if (method === 'includes' && args.length === 1) {
+        // Converter para SQL LIKE
+        const pattern = this.builder.createFunction('CONCAT', [
+          this.builder.createConstant('%'),
+          args[0],
+          this.builder.createConstant('%'),
+        ]);
+
+        return this.builder.createFunction('LIKE', [object, pattern]);
+      }
+
+      // Lidar com outros métodos - poderia adicionar mais aqui
+      // ...
+
+      // Padrão: converter para uma chamada de função
+      return this.builder.createFunction(method, [object, ...args]);
+    }
+
+    // Lidar com chamadas de função diretas
+    if (ts.isIdentifier(node.expression)) {
+      const functionName = node.expression.text;
+      const args = node.arguments.map(arg => this.processNode(arg, tableAlias));
+
+      // Lidar com funções SQL
+      if (['COUNT', 'SUM', 'AVG', 'MIN', 'MAX'].includes(functionName.toUpperCase())) {
+        return this.builder.createFunction(functionName.toUpperCase(), args);
+      }
+
+      // Padrão: converter para uma chamada de função
+      return this.builder.createFunction(functionName, args);
+    }
+
+    // Lidar com outros casos - pode ser uma expressão complexa
+    return this.builder.createConstant(node.getText());
+  }
+
+  /**
+   * Processa uma expressão de projeção (literal de objeto na função select)
+   * @param node O nó AST
+   * @param tableAlias O alias para a tabela
+   */
+  private processProjection(node: ts.Node, tableAlias: string): Map<string, Expression> {
+    const result = new Map<string, Expression>();
+
+    // Encontrar a expressão literal de objeto no corpo da função
+    let objectLiteral: ts.ObjectLiteralExpression | null = null;
+
+    // Função para procurar recursivamente um literal de objeto
+    const findObjectLiteral = (node: ts.Node): ts.ObjectLiteralExpression | null => {
+      if (ts.isObjectLiteralExpression(node)) {
+        return node;
+      }
+
+      if (ts.isExpressionStatement(node) && ts.isObjectLiteralExpression(node.expression)) {
+        return node.expression;
+      }
+
+      if (
+        ts.isReturnStatement(node) &&
+        node.expression &&
+        ts.isObjectLiteralExpression(node.expression)
+      ) {
+        return node.expression;
+      }
+
+      if (ts.isParenthesizedExpression(node) && ts.isObjectLiteralExpression(node.expression)) {
+        return node.expression;
+      }
+
+      // Para funções de seta com retorno implícito de literais de objeto
+      if (ts.isArrowFunction(node) && node.body && ts.isObjectLiteralExpression(node.body)) {
+        return node.body;
+      }
+
+      // Busca recursiva em filhos
+      let found: ts.ObjectLiteralExpression | null = null;
+      node.forEachChild(child => {
+        if (!found) {
+          found = findObjectLiteral(child);
+        }
+      });
+
+      return found;
+    };
+
+    objectLiteral = findObjectLiteral(node);
+
+    if (!objectLiteral) {
+      throw new Error('Esperava-se uma expressão literal de objeto na função select');
+    }
+
+    // Processar cada propriedade no literal de objeto
+    for (const property of objectLiteral.properties) {
+      if (ts.isPropertyAssignment(property) && ts.isIdentifier(property.name)) {
+        const propertyName = property.name.text;
+        const expression = this.processNode(property.initializer, tableAlias);
+
+        result.set(propertyName, expression);
+      }
+    }
+
+    return result;
+  }
+
+  /**
+   * Tenta avaliar uma expressão TypeScript para obter seu valor em tempo de execução
+   * @param node O nó AST a ser avaliado
+   */
+  private evaluateExpression(node: ts.Node): any {
+    // Este é um avaliador simplificado - um real seria mais complexo
+
+    // Lidar com identificadores (variáveis)
+    if (ts.isIdentifier(node)) {
+      const name = node.text;
+
+      // Verificar se está em nossas variáveis
+      if (name in this.variables) {
+        return this.variables[name];
+      }
+
+      // Verificar se temos informações no rastreador de propriedades
+      if (this.propertyTracker && this.propertyTracker.hasProperty(name)) {
+        // Aqui poderíamos retornar informações adicionais, mas
+        // como estamos avaliando um valor, não uma expressão SQL,
+        // retornamos indefinido
+        return undefined;
+      }
+
+      return undefined;
+    }
+
+    // Lidar com literais
+    if (ts.isStringLiteral(node)) {
+      return node.text;
+    }
+
+    if (ts.isNumericLiteral(node)) {
+      return Number(node.text);
+    }
+
+    if (node.kind === ts.SyntaxKind.TrueKeyword) {
+      return true;
+    }
+
+    if (node.kind === ts.SyntaxKind.FalseKeyword) {
+      return false;
+    }
+
+    if (node.kind === ts.SyntaxKind.NullKeyword) {
+      return null;
+    }
+
+    // Lidar com acesso a propriedade
+    if (ts.isPropertyAccessExpression(node)) {
+      const object = this.evaluateExpression(node.expression);
+
+      if (object !== undefined && object !== null) {
+        return object[node.name.text];
+      }
+
+      return undefined;
+    }
+
+    // Para outras expressões, precisaríamos de um avaliador JavaScript completo
+    // Este é um tópico complexo - por enquanto, retornaremos undefined
+    return undefined;
+  }
+
+  /**
+   * Mapeia um operador binário TypeScript para um tipo de expressão
+   * @param kind O tipo de sintaxe TypeScript
    */
   private mapBinaryOperator(kind: ts.SyntaxKind): ExpressionType {
     switch (kind) {
@@ -215,32 +835,13 @@ export class LambdaParser {
       case ts.SyntaxKind.BarBarToken:
         return ExpressionType.Or;
       default:
-        throw new Error(`Unsupported binary operator: ${ts.SyntaxKind[kind]}`);
+        throw new Error(`Operador binário não suportado: ${ts.SyntaxKind[kind]}`);
     }
   }
 
   /**
-   * Processes a prefix unary expression node
-   * @param node The prefix unary expression node
-   * @param tableAlias The alias for the table
-   */
-  private processPrefixUnaryExpression(
-    node: ts.PrefixUnaryExpression,
-    tableAlias: string,
-  ): Expression {
-    // Get the operator
-    const operator = this.mapUnaryOperator(node.operator);
-
-    // Process the operand
-    const operand = this.processNode(node.operand, tableAlias);
-
-    // Create a unary expression
-    return this.builder.createUnary(operator, operand);
-  }
-
-  /**
-   * Maps a TypeScript unary operator to an expression type
-   * @param kind The TypeScript syntax kind
+   * Mapeia um operador unário TypeScript para um tipo de expressão
+   * @param kind O tipo de sintaxe TypeScript
    */
   private mapUnaryOperator(kind: ts.PrefixUnaryOperator): ExpressionType {
     switch (kind) {
@@ -249,252 +850,7 @@ export class LambdaParser {
       case ts.SyntaxKind.MinusToken:
         return ExpressionType.Negate;
       default:
-        throw new Error(`Unsupported unary operator: ${ts.SyntaxKind[kind]}`);
+        throw new Error(`Operador unário não suportado: ${ts.SyntaxKind[kind]}`);
     }
-  }
-
-  /**
-   * Processes a property access expression node
-   * @param node The property access expression node
-   * @param tableAlias The alias for the table
-   */
-  private processPropertyAccess(node: ts.PropertyAccessExpression, tableAlias: string): Expression {
-    // Check if this is a property of our parameter
-    if (ts.isIdentifier(node.expression) && node.expression.text === this.parameterName) {
-      // This is a column reference
-      return this.builder.createColumn(node.name.text, tableAlias);
-    }
-
-    // Otherwise, try to evaluate the expression
-    const propertyName = node.name.text;
-    const object = this.evaluateExpression(node.expression);
-
-    if (object !== undefined && object !== null) {
-      // Return the property value
-      return this.builder.createConstant(object[propertyName]);
-    }
-
-    // If we can't evaluate, create a column expression as a fallback
-    // This assumes that any property access is referencing a column
-    return this.builder.createColumn(propertyName, tableAlias);
-  }
-
-  /**
-   * Processes an identifier node
-   * @param node The identifier node
-   * @param tableAlias The alias for the table
-   */
-  private processIdentifier(node: ts.Identifier, tableAlias: string): Expression {
-    const name = node.text;
-
-    // Check if this is our parameter
-    if (name === this.parameterName) {
-      // This is a reference to the entire entity - not common in SQL
-      // For now, just return a reference to the table
-      return this.builder.createConstant(`${tableAlias}`);
-    }
-
-    // Check if this is a context variable
-    if (name in this.variables) {
-      // It's a variable, return its value
-      return this.builder.createConstant(this.variables[name]);
-    }
-
-    // Otherwise, assume it's a column (though this is probably an error)
-    return this.builder.createColumn(name, tableAlias);
-  }
-
-  /**
-   * Processes a literal expression node
-   * @param node The literal expression node
-   */
-  private processLiteral(node: ts.LiteralExpression): Expression {
-    // Handle different types of literals
-    if (ts.isStringLiteral(node)) {
-      return this.builder.createConstant(node.text);
-    }
-
-    if (ts.isNumericLiteral(node)) {
-      return this.builder.createConstant(Number(node.text));
-    }
-
-    // Handle true/false keywords
-    if (node.kind === ts.SyntaxKind.TrueKeyword) {
-      return this.builder.createConstant(true);
-    }
-
-    if (node.kind === ts.SyntaxKind.FalseKeyword) {
-      return this.builder.createConstant(false);
-    }
-
-    // Handle null keyword
-    if (node.kind === ts.SyntaxKind.NullKeyword) {
-      return this.builder.createConstant(null);
-    }
-
-    // Default: convert to string
-    return this.builder.createConstant(node.getText());
-  }
-
-  /**
-   * Processes a call expression node
-   * @param node The call expression node
-   * @param tableAlias The alias for the table
-   */
-  private processCallExpression(node: ts.CallExpression, tableAlias: string): Expression {
-    // Handle method calls like string.includes(), array.some(), etc.
-    if (ts.isPropertyAccessExpression(node.expression)) {
-      const method = node.expression.name.text;
-      const object = this.processNode(node.expression.expression, tableAlias);
-      const args = node.arguments.map(arg => this.processNode(arg, tableAlias));
-
-      // Handle string.includes() -> LIKE
-      if (method === 'includes' && args.length === 1) {
-        // Convert to SQL LIKE
-        const pattern = this.builder.createFunction('CONCAT', [
-          this.builder.createConstant('%'),
-          args[0],
-          this.builder.createConstant('%'),
-        ]);
-
-        return this.builder.createFunction('LIKE', [object, pattern]);
-      }
-
-      // Handle other methods - could add more here
-      // ...
-
-      // Default: convert to a function call
-      return this.builder.createFunction(method, [object, ...args]);
-    }
-
-    // Handle direct function calls
-    if (ts.isIdentifier(node.expression)) {
-      const functionName = node.expression.text;
-      const args = node.arguments.map(arg => this.processNode(arg, tableAlias));
-
-      // Handle SQL functions
-      if (['COUNT', 'SUM', 'AVG', 'MIN', 'MAX'].includes(functionName.toUpperCase())) {
-        return this.builder.createFunction(functionName.toUpperCase(), args);
-      }
-
-      // Default: convert to a function call
-      return this.builder.createFunction(functionName, args);
-    }
-
-    // Handle other cases - could be a complex expression
-    return this.builder.createConstant(node.getText());
-  }
-
-  /**
-   * Processes a projection expression (object literal in the select function)
-   * @param node The AST node
-   * @param tableAlias The alias for the table
-   */
-  private processProjection(node: ts.Node, tableAlias: string): Map<string, Expression> {
-    const result = new Map<string, Expression>();
-
-    // Find the object literal expression in the function body
-    let objectLiteral: ts.ObjectLiteralExpression | null = null;
-
-    // Function to recursively search for an object literal
-    const findObjectLiteral = (node: ts.Node): ts.ObjectLiteralExpression | null => {
-      if (ts.isObjectLiteralExpression(node)) {
-        return node;
-      }
-
-      if (ts.isExpressionStatement(node) && ts.isObjectLiteralExpression(node.expression)) {
-        return node.expression;
-      }
-
-      if (
-        ts.isReturnStatement(node) &&
-        node.expression &&
-        ts.isObjectLiteralExpression(node.expression)
-      ) {
-        return node.expression;
-      }
-
-      if (ts.isParenthesizedExpression(node) && ts.isObjectLiteralExpression(node.expression)) {
-        return node.expression;
-      }
-
-      // For arrow functions with implicit return of object literals
-      if (ts.isArrowFunction(node) && node.body && ts.isObjectLiteralExpression(node.body)) {
-        return node.body;
-      }
-
-      // Recursive search in children
-      let found: ts.ObjectLiteralExpression | null = null;
-      node.forEachChild(child => {
-        if (!found) {
-          found = findObjectLiteral(child);
-        }
-      });
-
-      return found;
-    };
-
-    objectLiteral = findObjectLiteral(node);
-
-    if (!objectLiteral) {
-      throw new Error('Expected an object literal expression in select function');
-    }
-
-    // Process each property in the object literal
-    for (const property of objectLiteral.properties) {
-      if (ts.isPropertyAssignment(property) && ts.isIdentifier(property.name)) {
-        const propertyName = property.name.text;
-        const expression = this.processNode(property.initializer, tableAlias);
-
-        result.set(propertyName, expression);
-      }
-    }
-
-    return result;
-  }
-
-  /**
-   * Attempts to evaluate a TypeScript expression to get its runtime value
-   * @param node The AST node to evaluate
-   */
-  private evaluateExpression(node: ts.Node): any {
-    // This is a simplified evaluator - a real one would be more complex
-
-    // Handle identifiers (variables)
-    if (ts.isIdentifier(node)) {
-      const name = node.text;
-
-      // Check if it's in our variables
-      if (name in this.variables) {
-        return this.variables[name];
-      }
-
-      return undefined;
-    }
-
-    // Handle literals
-    if (ts.isStringLiteral(node)) {
-      return node.text;
-    }
-
-    if (ts.isNumericLiteral(node)) {
-      return Number(node.text);
-    }
-
-    if (node.kind === ts.SyntaxKind.TrueKeyword) {
-      return true;
-    }
-
-    if (node.kind === ts.SyntaxKind.FalseKeyword) {
-      return false;
-    }
-
-    if (node.kind === ts.SyntaxKind.NullKeyword) {
-      return null;
-    }
-
-    // For other expressions, we'd need a full JavaScript evaluator
-    // This is a complex topic - for now, we'll return undefined
-    return undefined;
   }
 }
