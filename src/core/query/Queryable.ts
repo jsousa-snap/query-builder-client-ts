@@ -11,7 +11,7 @@ import {
 } from './Types';
 
 import { JoinType, JoinExpression } from '../expressions/JoinExpression';
-import { OrderByExpression } from '../expressions/SelectExpression';
+import { OrderByExpression, SelectExpression } from '../expressions/SelectExpression';
 import { ExpressionBuilder } from './ExpressionBuilder';
 import { LambdaParser } from './LambdaParser';
 import { SqlGenerationVisitor } from '../visitors/SqlGenerationVisitor';
@@ -22,17 +22,12 @@ import { ColumnExpression } from '../expressions/ColumnExpression';
 import { BinaryExpression } from '../expressions/BinaryExpression';
 import { formatSQL, formatSQLClientStyle } from '../../utils/SqlFormatter';
 import { PropertyTracker, PropertySource } from './PropertyTracker';
+import { FunctionExpression } from '../expressions/FunctionExpression';
 
 class ResultInfo {
   constructor(
     public readonly tableName: string,
     public readonly tableAlias: string,
-  ) {}
-}
-class LastResult {
-  constructor(
-    public readonly result: any,
-    resultInfo: Record<string, ResultInfo>,
   ) {}
 }
 
@@ -211,8 +206,27 @@ export class Queryable<T> {
       newQueryable.projections = [];
 
       for (const [propertyName, mapping] of propertyMappings.entries()) {
-        // Verificar se a expressão é um acesso de propriedade aninhada
-        if (mapping.expression instanceof ColumnExpression) {
+        // Verificar se a expressão é um Queryable (subquery)
+        if (
+          mapping.expression instanceof FunctionExpression &&
+          mapping.expression.getFunctionName() === 'select'
+        ) {
+          // Handle FunctionExpression (potential subquery)
+          // **TODO: Implement logic to process the FunctionExpression and build the subquery**
+          // This will involve analyzing the function's body to find the Queryable operations (where, select, etc.)
+          // and constructing the corresponding SelectExpression.
+          // For now, let's create a placeholder:
+          const innerSelectExpression = this.expressionBuilder.createSelect(
+            [],
+            new TableExpression('temp', 't'),
+          );
+          const subqueryExpr = this.expressionBuilder.createSubquery(innerSelectExpression);
+          const projectionExpr = this.expressionBuilder.createProjection(
+            subqueryExpr,
+            propertyName,
+          );
+          newQueryable.projections.push(projectionExpr);
+        } else if (mapping.expression instanceof ColumnExpression) {
           const columnName = mapping.columnName || mapping.expression.getColumnName();
           let tableAlias = mapping.tableAlias || mapping.expression.getTableAlias();
 
@@ -265,14 +279,117 @@ export class Queryable<T> {
       // Converter o mapa em expressões de projeção
       newQueryable.projections = [];
       for (const [propertyName, expression] of projections.entries()) {
-        newQueryable.projections.push(
-          this.expressionBuilder.createProjection(expression, propertyName),
-        );
+        if (expression instanceof Queryable) {
+          const innerSelectExpression = this.expressionBuilder.createSelect(
+            expression.projections,
+            expression.fromTable,
+            expression.joins,
+            expression.whereClause,
+            expression.groupByColumns,
+            expression.havingClause,
+            expression.orderByColumns,
+            expression.limitValue,
+            expression.offsetValue,
+            expression.isDistinct,
+          );
+          const subqueryExpr = this.expressionBuilder.createSubquery(innerSelectExpression);
+          newQueryable.projections.push(
+            this.expressionBuilder.createProjection(subqueryExpr, propertyName),
+          );
+        } else {
+          newQueryable.projections.push(
+            this.expressionBuilder.createProjection(expression, propertyName),
+          );
+        }
       }
     }
 
     return newQueryable;
   }
+  // select<TResult>(selector: SelectorFunction<T, TResult>): Queryable<TResult> {
+  //   // Criar um novo queryable com o novo tipo de resultado
+  //   const newQueryable = this.cloneWithNewType<TResult>();
+
+  //   // Obter o texto da função seletora para análise
+  //   const selectorStr = selector.toString();
+
+  //   try {
+  //     // Extrair os mapeamentos de propriedades usando o LambdaParser aprimorado
+  //     const lambdaParser = new LambdaParser(
+  //       this.expressionBuilder,
+  //       this.contextVariables,
+  //       this.propertyTracker,
+  //     );
+
+  //     // Analisar o seletor para extrair os mapeamentos de propriedades com informações de origem
+  //     const propertyMappings = lambdaParser.parseSelectorEnhanced<T, TResult>(selector, this.alias);
+
+  //     // Converter os mapeamentos para expressões de projeção
+  //     newQueryable.projections = [];
+
+  //     for (const [propertyName, mapping] of propertyMappings.entries()) {
+  //       // Verificar se a expressão é um acesso de propriedade aninhada
+  //       if (mapping.expression instanceof ColumnExpression) {
+  //         const columnName = mapping.columnName || mapping.expression.getColumnName();
+  //         let tableAlias = mapping.tableAlias || mapping.expression.getTableAlias();
+
+  //         // Verificar se há um caminho de propriedade aninhada (ex: joined.order.amount)
+  //         if (mapping.propertyPath && mapping.propertyPath.length > 1) {
+  //           // Tentar encontrar a tabela correta para esta propriedade aninhada
+  //           const source = this.resolveNestedPropertySource(mapping.propertyPath);
+
+  //           if (source) {
+  //             tableAlias = source.tableAlias;
+  //           }
+  //         }
+
+  //         // Criar uma nova expressão de coluna com o alias correto
+  //         const columnExpr = this.expressionBuilder.createColumn(columnName, tableAlias);
+
+  //         // Criar a projeção para esta propriedade
+  //         const projectionExpr = this.expressionBuilder.createProjection(columnExpr, propertyName);
+
+  //         // Adicionar à lista de projeções
+  //         newQueryable.projections.push(projectionExpr);
+
+  //         // Registrar a propriedade no rastreador
+  //         newQueryable.propertyTracker.registerProperty(propertyName, tableAlias, columnName);
+  //       } else {
+  //         // Para expressões que não são simples acessos de coluna (ex: cálculos, funções)
+  //         const projectionExpr = this.expressionBuilder.createProjection(
+  //           mapping.expression,
+  //           propertyName,
+  //         );
+  //         newQueryable.projections.push(projectionExpr);
+
+  //         // Registrar como expressão complexa
+  //         if (mapping.tableAlias) {
+  //           newQueryable.propertyTracker.registerProperty(
+  //             propertyName,
+  //             mapping.tableAlias,
+  //             mapping.columnName || 'expression',
+  //           );
+  //         }
+  //       }
+  //     }
+  //   } catch (error) {
+  //     // Se houver erro na análise avançada, cair para o método padrão
+  //     console.warn('Erro na análise avançada do selector, usando método padrão:', error);
+
+  //     // Analisar o seletor em um mapa de propriedade -> expressão (método padrão)
+  //     const projections = this.lambdaParser.parseSelector<T, TResult>(selector, this.alias);
+
+  //     // Converter o mapa em expressões de projeção
+  //     newQueryable.projections = [];
+  //     for (const [propertyName, expression] of projections.entries()) {
+  //       newQueryable.projections.push(
+  //         this.expressionBuilder.createProjection(expression, propertyName),
+  //       );
+  //     }
+  //   }
+
+  //   return newQueryable;
+  // }
 
   /**
    * Determina a origem de uma propriedade aninhada (ex: joined.order.amount)
@@ -1372,5 +1489,20 @@ export class Queryable<T> {
 
     // Se não é um caso que precisamos tratar, retornar a expressão original
     return expr;
+  }
+
+  toMetadata(): SelectExpression {
+    return this.expressionBuilder.createSelect(
+      this.projections,
+      this.fromTable,
+      this.joins,
+      this.whereClause,
+      this.groupByColumns,
+      this.havingClause,
+      this.orderByColumns,
+      this.limitValue,
+      this.offsetValue,
+      this.isDistinct,
+    );
   }
 }

@@ -14,6 +14,7 @@ describe('Query Builder - Select Tests', () => {
 
     const query = users
       .select(user => ({
+        name: user.name,
         posts: posts.where(post => post.userId === user.id).select(post => post.message),
       }))
       .toQueryString();
