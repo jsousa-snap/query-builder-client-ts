@@ -13,6 +13,7 @@ function normalizeSQL(sql: string): string {
 }
 
 import { DbContext } from '../core/context/DbContext';
+import { JoinType } from '../core/expressions/JoinExpression';
 
 describe('Query Builder - Select Tests', () => {
   let dbContext: DbContext;
@@ -132,8 +133,8 @@ describe('Query Builder - Select Tests', () => {
 
   test('Select with join', () => {
     // Arrange
-    const users = dbContext.set<User>('users');
-    const orders = dbContext.set<Order>('orders');
+    const users = dbContext.set('users');
+    const orders = dbContext.set('orders');
     const uni = dbContext.set('unis');
 
     // Act
