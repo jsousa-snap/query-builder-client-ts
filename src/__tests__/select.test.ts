@@ -200,7 +200,7 @@ describe('Query Builder - Select Tests', () => {
 
     // Assert
     expect(normalizeSQL(query)).toContain(
-      normalizeSQL(`SELECT o.amount
+      normalizeSQL(`SELECT o.amount AS amount
         FROM users AS u
         INNER JOIN orders AS o ON (u.id = o.userId)
         INNER JOIN unis AS u1 ON (o.id = u1.orderId)`),

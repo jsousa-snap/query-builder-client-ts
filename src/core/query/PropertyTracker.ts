@@ -1,4 +1,4 @@
-// src/core/query/PropertyTracker.ts
+// src/core/query/PropertyTracker.ts (aprimorado)
 
 /**
  * Interface que representa a origem de uma propriedade
@@ -12,6 +12,8 @@ export interface PropertySource {
   columnName: string;
   /** Caminho para a propriedade no objeto aninhado (se aplicável) */
   propertyPath?: string[];
+  /** Indicador se é uma propriedade composta (objeto ou expressão complexa) */
+  isCompound?: boolean;
 }
 
 /**
@@ -45,11 +47,14 @@ export class PropertyTracker {
       throw new Error(`Table alias "${tableAlias}" não está registrado`);
     }
 
+    const isCompound = columnName === '*' || propertyPath !== undefined;
+
     this.propertyMap.set(propertyName, {
       tableAlias,
       tableName,
       columnName,
       propertyPath,
+      isCompound,
     });
   }
 
@@ -67,17 +72,84 @@ export class PropertyTracker {
   }
 
   /**
-   * Obtém a origem de uma propriedade
+   * Obtém a origem de uma propriedade, com suporte aprimorado para propriedades aninhadas
+   * @param propertyPath Caminho da propriedade, pode ser simples ("name") ou aninhado ("order.amount")
    */
-  getPropertySource(propertyName: string): PropertySource | undefined {
-    return this.propertyMap.get(propertyName);
+  getPropertySource(propertyPath: string): PropertySource | undefined {
+    // Verificar primeiro se existe a propriedade exatamente como foi solicitada
+    const directMatch = this.propertyMap.get(propertyPath);
+    if (directMatch) {
+      return directMatch;
+    }
+
+    // Se não houver correspondência direta, verificar se é um caminho aninhado
+    const pathParts = propertyPath.split('.');
+
+    if (pathParts.length > 1) {
+      // É um caminho aninhado, buscar o objeto raiz
+      const rootObject = pathParts[0];
+      const rootSource = this.propertyMap.get(rootObject);
+
+      if (rootSource && rootSource.isCompound) {
+        // Encontrou o objeto raiz, verificar se temos um padrão wildcard para ele
+        const wildcardKey = `${rootObject}.*`;
+        const wildcardSource = this.propertyMap.get(wildcardKey);
+
+        if (wildcardSource) {
+          // O objeto tem um mapeamento de wildcard, retornar com a propriedade final
+          return {
+            tableAlias: wildcardSource.tableAlias,
+            tableName: wildcardSource.tableName,
+            columnName: pathParts[pathParts.length - 1],
+            propertyPath: pathParts,
+            isCompound: false,
+          };
+        }
+
+        // Se não tiver wildcard, tentar inferir pelo objeto raiz
+        return {
+          tableAlias: rootSource.tableAlias,
+          tableName: rootSource.tableName,
+          columnName: pathParts[pathParts.length - 1],
+          propertyPath: pathParts,
+          isCompound: false,
+        };
+      }
+
+      // Tentar buscar direto pelo objeto secundário se tiver dois níveis
+      // Ex: order.amount -> verificar se há registro para "amount" com alias da tabela de orders
+      if (pathParts.length === 2) {
+        // Buscar todos os registros e ver se algum bate com o objeto raiz
+        for (const [propName, source] of this.propertyMap.entries()) {
+          if (propName === pathParts[1] || source.columnName === pathParts[1]) {
+            // É uma possível correspondência, verificar se há outro registro para
+            // o objeto raiz que aponte para a mesma tabela
+            for (const [rootPropName, rootSource] of this.propertyMap.entries()) {
+              if (rootPropName === rootObject && rootSource.tableAlias === source.tableAlias) {
+                // Encontramos uma correspondência provável
+                return source;
+              }
+            }
+          }
+        }
+      }
+    }
+
+    // Se chegou aqui, não encontrou correspondência
+    return undefined;
   }
 
   /**
    * Verifica se uma propriedade existe
    */
   hasProperty(propertyName: string): boolean {
-    return this.propertyMap.has(propertyName);
+    // Verificar correspondência direta
+    if (this.propertyMap.has(propertyName)) {
+      return true;
+    }
+
+    // Verificar propriedades aninhadas
+    return this.getPropertySource(propertyName) !== undefined;
   }
 
   /**
@@ -159,5 +231,47 @@ export class PropertyTracker {
     }
 
     return tracker;
+  }
+
+  /**
+   * Obtém todos os aliases de tabela registrados
+   * @returns Array com todos os aliases de tabela
+   */
+  getTableAliases(): string[] {
+    return Array.from(this.tableAliasMap.keys());
+  }
+
+  /**
+   * Obtém o mapa de aliases de tabela
+   * @returns Mapa de aliases para nomes de tabela
+   */
+  getTableAliasMap(): Map<string, string> {
+    return new Map(this.tableAliasMap);
+  }
+
+  /**
+   * Imprime o conteúdo do rastreador para depuração
+   */
+  dump(): string {
+    let result = '=== PropertyTracker Dump ===\n';
+
+    result += 'Tables:\n';
+    for (const [alias, tableName] of this.tableAliasMap.entries()) {
+      result += `  ${alias} -> ${tableName}\n`;
+    }
+
+    result += 'Properties:\n';
+    for (const [propName, source] of this.propertyMap.entries()) {
+      result += `  ${propName} -> ${source.tableAlias}.${source.columnName}`;
+      if (source.propertyPath) {
+        result += ` (path: ${source.propertyPath.join('.')})`;
+      }
+      if (source.isCompound) {
+        result += ` (compound)`;
+      }
+      result += '\n';
+    }
+
+    return result;
   }
 }

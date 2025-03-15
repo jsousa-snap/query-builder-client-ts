@@ -99,8 +99,150 @@ export class LambdaParser {
     // Analisar o corpo da função em uma AST
     const node = this.parseLambda(fnString);
 
-    // Converter a AST em um mapa de PropertyMapping
-    return this.processProjectionEnhanced(node, tableAlias);
+    // Encontrar o literal de objeto no corpo da função
+    let objectLiteral = this.findObjectLiteral(node);
+
+    if (!objectLiteral) {
+      throw new Error('Esperava-se uma expressão literal de objeto na função select');
+    }
+
+    const result = new Map<string, PropertyMapping>();
+
+    // Processar cada propriedade no literal de objeto
+    for (const property of objectLiteral.properties) {
+      if (ts.isPropertyAssignment(property) && ts.isIdentifier(property.name)) {
+        const propertyName = property.name.text;
+
+        // Verificar se o inicializador é uma propriedade aninhada
+        if (ts.isPropertyAccessExpression(property.initializer)) {
+          const propPath = this.extractPropertyPath(property.initializer);
+
+          if (propPath.length >= 3 && propPath[0] === this.parameterName) {
+            // Temos uma propriedade aninhada como joined.order.amount
+            const objectName = propPath[1]; // ex: "order"
+            const columnName = propPath[propPath.length - 1]; // ex: "amount"
+
+            // Tentar resolver a tabela correta usando o PropertyTracker
+            let resolvedTableAlias = tableAlias;
+            let isComplex = false;
+
+            if (this.propertyTracker) {
+              // Verificar se o objeto intermediário está registrado
+              const objectSource = this.propertyTracker.getPropertySource(objectName);
+
+              if (objectSource) {
+                // Usar o alias da tabela do objeto intermediário
+                resolvedTableAlias = objectSource.tableAlias;
+              } else {
+                // Verificar wildcard
+                const wildcardKey = `${objectName}.*`;
+                const wildcardSource = this.propertyTracker.getPropertySource(wildcardKey);
+
+                if (wildcardSource) {
+                  resolvedTableAlias = wildcardSource.tableAlias;
+                } else {
+                  // Tentar inferir pelo padrão de nomeação
+                  for (const [alias, _] of this.propertyTracker.getTableAliasMap().entries()) {
+                    if (
+                      alias === objectName ||
+                      (objectName.length > 0 && alias === objectName[0])
+                    ) {
+                      resolvedTableAlias = alias;
+                      break;
+                    }
+                  }
+                }
+              }
+            }
+
+            // Criar a expressão de coluna com o alias correto
+            const expression = this.builder.createColumn(columnName, resolvedTableAlias);
+
+            // Registrar no mapa de resultados
+            result.set(propertyName, {
+              propertyName,
+              expression,
+              tableAlias: resolvedTableAlias,
+              columnName,
+              propertyPath: propPath.slice(1), // Remover o parâmetro inicial
+              isComplex,
+            });
+          } else {
+            // Caso padrão: processamento normal
+            const expressionResult = this.processPropertyInitializer(
+              property.initializer,
+              tableAlias,
+            );
+
+            result.set(propertyName, {
+              propertyName,
+              expression: expressionResult.expression,
+              tableAlias: expressionResult.tableAlias,
+              columnName: expressionResult.columnName,
+              propertyPath: expressionResult.propertyPath,
+              isComplex: expressionResult.isComplex,
+            });
+          }
+        } else {
+          // Não é um acesso de propriedade aninhado
+          const expressionResult = this.processPropertyInitializer(
+            property.initializer,
+            tableAlias,
+          );
+
+          result.set(propertyName, {
+            propertyName,
+            expression: expressionResult.expression,
+            tableAlias: expressionResult.tableAlias,
+            columnName: expressionResult.columnName,
+            propertyPath: expressionResult.propertyPath,
+            isComplex: expressionResult.isComplex,
+          });
+        }
+      }
+    }
+
+    return result;
+  }
+
+  /**
+   * Encontra um literal de objeto em um nó AST
+   */
+  private findObjectLiteral(node: ts.Node): ts.ObjectLiteralExpression | null {
+    if (ts.isObjectLiteralExpression(node)) {
+      return node;
+    }
+
+    if (ts.isExpressionStatement(node) && ts.isObjectLiteralExpression(node.expression)) {
+      return node.expression;
+    }
+
+    if (
+      ts.isReturnStatement(node) &&
+      node.expression &&
+      ts.isObjectLiteralExpression(node.expression)
+    ) {
+      return node.expression;
+    }
+
+    if (ts.isParenthesizedExpression(node) && ts.isObjectLiteralExpression(node.expression)) {
+      return node.expression;
+    }
+
+    // Para funções de seta com retorno implícito de literais de objeto
+    if (ts.isArrowFunction(node) && node.body && ts.isObjectLiteralExpression(node.body)) {
+      return node.body;
+    }
+
+    // Busca recursiva em filhos
+    let found: ts.ObjectLiteralExpression | null = null;
+    node.forEachChild(child => {
+      if (!found) {
+        found = this.findObjectLiteral(child);
+      }
+    });
+
+    return found;
   }
 
   /**
@@ -470,49 +612,84 @@ export class LambdaParser {
     // Extrair o caminho completo da propriedade
     const propPath = this.extractPropertyPath(node);
 
-    // Verificar se este é um acesso a propriedade do nosso parâmetro
-    if (propPath.length > 0 && propPath[0] === this.parameterName) {
-      // É uma referência de coluna
-      const columnName = propPath[propPath.length - 1];
+    // Se não temos um caminho de propriedade (isso não deveria acontecer)
+    if (propPath.length === 0) {
+      return this.builder.createColumn(node.name.text, tableAlias);
+    }
 
-      // Se temos propriedades aninhadas e um rastreador de propriedades
-      if (propPath.length > 2 && this.propertyTracker) {
-        const nestedProp = propPath[1];
-        const source = this.propertyTracker.getPropertySource(nestedProp);
+    // Criar a string do caminho completo para consulta no PropertyTracker
+    const fullPropertyPath = propPath.join('.');
 
-        if (source) {
-          // Usar o alias da tabela associada à primeira parte do caminho aninhado
-          return this.builder.createColumn(columnName, source.tableAlias);
-        }
+    // Se temos um PropertyTracker, tentar usá-lo para resolver a origem da propriedade
+    if (this.propertyTracker) {
+      const source = this.propertyTracker.getPropertySource(fullPropertyPath);
+
+      if (source) {
+        // Temos informações de origem para esta propriedade ou caminho
+        return this.builder.createColumn(source.columnName, source.tableAlias);
       }
+    }
 
-      // Caso padrão - usar o alias da tabela atual
+    // Caso 1: Verificar se este é um acesso direto ao parâmetro lambda
+    if (propPath[0] === this.parameterName) {
+      // É uma referência de coluna direta do parâmetro
+      const columnName = propPath[propPath.length - 1];
       return this.builder.createColumn(columnName, tableAlias);
     }
 
-    // Verificar se temos informações no rastreador de propriedades
-    if (propPath.length > 0 && this.propertyTracker) {
-      const firstProp = propPath[0];
-      const source = this.propertyTracker.getPropertySource(firstProp);
+    // Caso 2: Verificar acesso a propriedades aninhadas em dois níveis
+    // Exemplo: joined.order.amount
+    if (propPath.length >= 3 && this.propertyTracker) {
+      // Verificar se o primeiro nível é reconhecido
+      const firstLevelSource = this.propertyTracker.getPropertySource(propPath[0]);
 
-      if (source) {
-        // Temos uma fonte para esta propriedade
-        const columnName = propPath[propPath.length - 1];
-        return this.builder.createColumn(columnName, source.tableAlias);
+      if (firstLevelSource) {
+        // Verificar se o segundo nível tem um registro específico
+        const secondLevelKey = `${propPath[0]}.${propPath[1]}`;
+        const secondLevelSource = this.propertyTracker.getPropertySource(secondLevelKey);
+
+        if (secondLevelSource) {
+          // Temos informação sobre o segundo nível, usar o alias dele
+          return this.builder.createColumn(
+            propPath[propPath.length - 1],
+            secondLevelSource.tableAlias,
+          );
+        }
+
+        // Se não temos informação sobre o segundo nível, verificar wildcards
+        const wildcardKey = `${propPath[0]}.*`;
+        const wildcardSource = this.propertyTracker.getPropertySource(wildcardKey);
+
+        if (wildcardSource) {
+          // Usar o alias do wildcard para o segundo nível
+          return this.builder.createColumn(
+            propPath[propPath.length - 1],
+            wildcardSource.tableAlias,
+          );
+        }
+      }
+
+      // Caso específico: buscar por registros que mapeiam o segundo nível diretamente
+      // Verificando se algum registro tem o mesmo nome do segundo nível e um alias de tabela
+      for (const source of this.propertyTracker.getAllPropertySources().values()) {
+        if (source.propertyPath && source.propertyPath[0] === propPath[1]) {
+          return this.builder.createColumn(propPath[propPath.length - 1], source.tableAlias);
+        }
       }
     }
 
-    // Caso contrário, tente avaliar a expressão
+    // Caso 3: Tentar avaliar a expressão dinamicamente (para variáveis, etc.)
     const propertyName = node.name.text;
     const object = this.evaluateExpression(node.expression);
 
     if (object !== undefined && object !== null) {
-      // Retornar o valor da propriedade
+      // Retornar o valor da propriedade como constante
       return this.builder.createConstant(object[propertyName]);
     }
 
-    // Se não pudermos avaliar, criar uma expressão de coluna como fallback
+    // Caso 4: Fallback para propriedades não rastreadas
     // Isso assume que qualquer acesso a propriedade está referenciando uma coluna
+    // Esta é uma suposição arriscada, mas é o melhor que podemos fazer sem mais informações
     return this.builder.createColumn(propertyName, tableAlias);
   }
 
@@ -852,5 +1029,86 @@ export class LambdaParser {
       default:
         throw new Error(`Operador unário não suportado: ${ts.SyntaxKind[kind]}`);
     }
+  }
+
+  // Adicionar estes métodos à classe LambdaParser existente
+
+  /**
+   * Analisa um predicado com suporte a propriedades aninhadas
+   */
+  parsePredicateWithNesting<T>(predicate: (entity: T) => boolean, tableAlias: string): Expression {
+    const fnString = predicate.toString();
+    this.extractParameterName(fnString);
+
+    // Analisar o corpo da função em uma AST
+    const node = this.parseLambda(fnString);
+
+    // Converter a AST em uma árvore de expressões, com suporte a aninhamento
+    return this.processNodeWithNesting(node, tableAlias);
+  }
+
+  /**
+   * Processa um nó AST com suporte a propriedades aninhadas
+   */
+  private processNodeWithNesting(node: ts.Node, tableAlias: string): Expression {
+    // Processar diferentes tipos de nós, semelhante ao processNode original
+    // mas com suporte adicional para propriedades aninhadas
+
+    // Tratar um caso específico: propriedade aninhada em expressão binária
+    if (ts.isBinaryExpression(node)) {
+      const left = this.processPropertyWithNesting(node.left, tableAlias);
+      const right = this.processPropertyWithNesting(node.right, tableAlias);
+      const operator = this.mapBinaryOperator(node.operatorToken.kind);
+
+      return this.builder.createBinary(operator, left, right);
+    }
+
+    // Para os demais tipos, usar o processamento padrão
+    return this.processNode(node, tableAlias);
+  }
+
+  /**
+   * Processa uma propriedade potencialmente aninhada
+   */
+  private processPropertyWithNesting(node: ts.Node, defaultTableAlias: string): Expression {
+    // Caso especial: acesso a propriedade aninhada como joined.order.amount
+    if (ts.isPropertyAccessExpression(node) && ts.isPropertyAccessExpression(node.expression)) {
+      // Extrair as partes da expressão aninhada
+      const property = node.name.text; // "amount"
+      const objectExpr = node.expression; // "joined.order"
+
+      if (ts.isPropertyAccessExpression(objectExpr)) {
+        const objectName = objectExpr.name.text; // "order"
+
+        // Verificar se temos informações sobre este objeto no PropertyTracker
+        if (this.propertyTracker) {
+          // Tentar como objeto direto
+          const objectSource = this.propertyTracker.getPropertySource(objectName);
+          if (objectSource) {
+            return this.builder.createColumn(property, objectSource.tableAlias);
+          }
+
+          // Tentar como wildcard
+          const wildcardKey = `${objectName}.*`;
+          const wildcardSource = this.propertyTracker.getPropertySource(wildcardKey);
+          if (wildcardSource) {
+            return this.builder.createColumn(property, wildcardSource.tableAlias);
+          }
+
+          // Verificar correspondência com aliases de tabela
+          for (const alias of this.propertyTracker.getTableAliases()) {
+            if (
+              alias === objectName ||
+              objectName.charAt(0).toLowerCase() === alias.toLowerCase()
+            ) {
+              return this.builder.createColumn(property, alias);
+            }
+          }
+        }
+      }
+    }
+
+    // Para os demais casos, usar o processamento padrão
+    return this.processNode(node, defaultTableAlias);
   }
 }
