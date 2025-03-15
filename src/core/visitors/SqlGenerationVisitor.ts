@@ -1,21 +1,15 @@
-import {
-  ExpressionVisitor,
-  ExpressionType,
-  BinaryExpression,
-  UnaryExpression,
-  ColumnExpression,
-  ConstantExpression,
-  FunctionExpression,
-  SelectExpression,
-  TableExpression,
-  JoinExpression,
-  SubqueryExpression,
-  ProjectionExpression,
-  ParameterExpression,
-} from '../expressions/Expression';
-
-import { JoinType } from '../expressions/JoinExpression';
-import { OrderByExpression } from '../expressions/SelectExpression';
+import { BinaryExpression } from '../expressions/BinaryExpression';
+import { ColumnExpression } from '../expressions/ColumnExpression';
+import { ConstantExpression } from '../expressions/ConstantExpression';
+import { ExpressionType, ExpressionVisitor } from '../expressions/Expression';
+import { FunctionExpression } from '../expressions/FunctionExpression';
+import { JoinExpression, JoinType } from '../expressions/JoinExpression';
+import { ParameterExpression } from '../expressions/ParameterExpression';
+import { ProjectionExpression } from '../expressions/ProjectionExpression';
+import { OrderByExpression, SelectExpression } from '../expressions/SelectExpression';
+import { SubqueryExpression } from '../expressions/SubqueryExpression';
+import { TableExpression } from '../expressions/TableExpression';
+import { UnaryExpression } from '../expressions/UnaryExpression';
 
 /**
  * A visitor that generates SQL from an expression tree

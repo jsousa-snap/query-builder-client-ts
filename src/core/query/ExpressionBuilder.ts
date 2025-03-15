@@ -1,21 +1,15 @@
-import {
-  Expression,
-  BinaryExpression,
-  UnaryExpression,
-  ColumnExpression,
-  ConstantExpression,
-  FunctionExpression,
-  SelectExpression,
-  TableExpression,
-  JoinExpression,
-  SubqueryExpression,
-  ProjectionExpression,
-  ParameterExpression,
-  ExpressionType,
-} from '../expressions/Expression';
-
-import { JoinType } from '../expressions/JoinExpression';
-import { OrderByExpression } from '../expressions/SelectExpression';
+import { Expression, ExpressionType } from '../expressions/Expression';
+import { BinaryExpression } from '../expressions/BinaryExpression';
+import { UnaryExpression } from '../expressions/UnaryExpression';
+import { ColumnExpression } from '../expressions/ColumnExpression';
+import { ConstantExpression } from '../expressions/ConstantExpression';
+import { FunctionExpression } from '../expressions/FunctionExpression';
+import { SelectExpression, OrderByExpression } from '../expressions/SelectExpression';
+import { TableExpression } from '../expressions/TableExpression';
+import { JoinExpression, JoinType } from '../expressions/JoinExpression';
+import { SubqueryExpression } from '../expressions/SubqueryExpression';
+import { ProjectionExpression } from '../expressions/ProjectionExpression';
+import { ParameterExpression } from '../expressions/ParameterExpression';
 import { OrderDirection } from './Types';
 
 /**

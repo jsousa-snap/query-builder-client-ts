@@ -396,22 +396,45 @@ export class LambdaParser {
     // Find the object literal expression in the function body
     let objectLiteral: ts.ObjectLiteralExpression | null = null;
 
-    if (ts.isExpressionStatement(node) && ts.isObjectLiteralExpression(node.expression)) {
-      objectLiteral = node.expression;
-    } else if (
-      ts.isReturnStatement(node) &&
-      node.expression &&
-      ts.isObjectLiteralExpression(node.expression)
-    ) {
-      objectLiteral = node.expression;
-    } else if (
-      ts.isParenthesizedExpression(node) &&
-      ts.isObjectLiteralExpression(node.expression)
-    ) {
-      objectLiteral = node.expression;
-    } else if (ts.isObjectLiteralExpression(node)) {
-      objectLiteral = node;
-    }
+    // Function to recursively search for an object literal
+    const findObjectLiteral = (node: ts.Node): ts.ObjectLiteralExpression | null => {
+      if (ts.isObjectLiteralExpression(node)) {
+        return node;
+      }
+
+      if (ts.isExpressionStatement(node) && ts.isObjectLiteralExpression(node.expression)) {
+        return node.expression;
+      }
+
+      if (
+        ts.isReturnStatement(node) &&
+        node.expression &&
+        ts.isObjectLiteralExpression(node.expression)
+      ) {
+        return node.expression;
+      }
+
+      if (ts.isParenthesizedExpression(node) && ts.isObjectLiteralExpression(node.expression)) {
+        return node.expression;
+      }
+
+      // For arrow functions with implicit return of object literals
+      if (ts.isArrowFunction(node) && node.body && ts.isObjectLiteralExpression(node.body)) {
+        return node.body;
+      }
+
+      // Recursive search in children
+      let found: ts.ObjectLiteralExpression | null = null;
+      node.forEachChild(child => {
+        if (!found) {
+          found = findObjectLiteral(child);
+        }
+      });
+
+      return found;
+    };
+
+    objectLiteral = findObjectLiteral(node);
 
     if (!objectLiteral) {
       throw new Error('Expected an object literal expression in select function');

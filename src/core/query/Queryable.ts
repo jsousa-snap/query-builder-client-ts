@@ -10,22 +10,17 @@ import {
   OrderDirection,
 } from './Types';
 
-import {
-  Expression,
-  BinaryExpression,
-  ColumnExpression,
-  ConstantExpression,
-  FunctionExpression,
-  ProjectionExpression,
-  SelectExpression,
-  TableExpression,
-} from '../expressions/Expression';
-
 import { JoinType, JoinExpression } from '../expressions/JoinExpression';
 import { OrderByExpression } from '../expressions/SelectExpression';
 import { ExpressionBuilder } from './ExpressionBuilder';
 import { LambdaParser } from './LambdaParser';
 import { SqlGenerationVisitor } from '../visitors/SqlGenerationVisitor';
+import { TableExpression } from '../expressions/TableExpression';
+import { Expression } from '../expressions/Expression';
+import { ProjectionExpression } from '../expressions/ProjectionExpression';
+import { ColumnExpression } from '../expressions/ColumnExpression';
+import { BinaryExpression } from '../expressions/BinaryExpression';
+import { formatSQL, formatSQLClientStyle } from '../../utils/SqlFormatter';
 
 /**
  * Represents a query that can be built and executed against a data source
@@ -97,7 +92,7 @@ export class Queryable<T> {
     const newQueryable = this.clone();
 
     // Parse the predicate into an expression
-    const predicateExpr = this.lambdaParser.parsePredicate(predicate, this.alias);
+    const predicateExpr = this.lambdaParser.parsePredicate<T>(predicate, this.alias);
 
     // If there's already a where clause, AND it with the new one
     if (newQueryable.whereClause) {
@@ -121,7 +116,7 @@ export class Queryable<T> {
     const newQueryable = this.cloneWithNewType<TResult>();
 
     // Parse the selector into a map of property -> expression
-    const projections = this.lambdaParser.parseSelector(selector, this.alias);
+    const projections = this.lambdaParser.parseSelector<T, TResult>(selector, this.alias);
 
     // Convert the map to projection expressions
     newQueryable.projections = [];
@@ -142,6 +137,73 @@ export class Queryable<T> {
    * @param resultSelector Function to combine the source and target records
    * @param joinType The type of join to perform
    */
+  // join<U, TResult>(
+  //   target: DbSet<U>,
+  //   sourceKeySelector: JoinKeySelector<T>,
+  //   targetKeySelector: JoinKeySelector<U>,
+  //   resultSelector: JoinResultSelector<T, U, TResult>,
+  //   joinType: JoinType = JoinType.INNER,
+  // ): Queryable<TResult> {
+  //   // Create a new queryable with the new result type
+  //   const newQueryable = this.cloneWithNewType<TResult>();
+
+  //   // Get the target table info
+  //   const targetTableName = target.getTableName();
+  //   const targetAlias = target.getAlias();
+
+  //   // Create the target table expression
+  //   const targetTable = this.expressionBuilder.createTable(targetTableName, targetAlias);
+
+  //   // Parse the key selectors
+  //   const sourceKey = this.lambdaParser.parsePredicate<T>(
+  //     entity => sourceKeySelector(entity) !== null,
+  //     this.alias,
+  //   );
+
+  //   const targetKey = this.lambdaParser.parsePredicate<U>(
+  //     entity => targetKeySelector(entity) !== null,
+  //     targetAlias,
+  //   );
+
+  //   // Extract the column expressions from the conditions
+  //   let sourceColumn: ColumnExpression | null = null;
+  //   let targetColumn: ColumnExpression | null = null;
+
+  //   // Improved extraction logic
+  //   const findColumnExpression = (expr: Expression): ColumnExpression | null => {
+  //     if (expr instanceof ColumnExpression) {
+  //       return expr;
+  //     }
+
+  //     if (expr instanceof BinaryExpression) {
+  //       const left = findColumnExpression(expr.getLeft());
+  //       if (left) return left;
+
+  //       const right = findColumnExpression(expr.getRight());
+  //       if (right) return right;
+  //     }
+
+  //     return null;
+  //   };
+
+  //   sourceColumn = findColumnExpression(sourceKey);
+  //   targetColumn = findColumnExpression(targetKey);
+
+  //   if (!sourceColumn || !targetColumn) {
+  //     throw new Error('Could not extract join keys from selectors');
+  //   }
+  //   // Create the join condition
+  //   const joinCondition = this.expressionBuilder.createEqual(sourceColumn, targetColumn);
+
+  //   // Create the join expression
+  //   const joinExpr = this.expressionBuilder.createJoin(targetTable, joinCondition, joinType);
+
+  //   // Add the join to the query
+  //   newQueryable.joins.push(joinExpr);
+
+  //   return newQueryable;
+  // }
+
   join<U, TResult>(
     target: DbSet<U>,
     sourceKeySelector: JoinKeySelector<T>,
@@ -159,49 +221,49 @@ export class Queryable<T> {
     // Create the target table expression
     const targetTable = this.expressionBuilder.createTable(targetTableName, targetAlias);
 
-    // Parse the key selectors
-    const sourceKey = this.lambdaParser.parsePredicate(
-      entity => sourceKeySelector(entity) !== null,
-      this.alias,
-    );
+    // Use a more direct approach for extracting column names
+    // We'll examine the function source to get the property name
+    const getPropertyFromSelector = (selector: Function): string => {
+      const fnStr = selector.toString();
 
-    const targetKey = this.lambdaParser.parsePredicate(
-      entity => targetKeySelector(entity as any) !== null,
-      targetAlias,
-    );
-
-    // Extract the column expressions from the conditions
-    let sourceColumn: ColumnExpression | null = null;
-    let targetColumn: ColumnExpression | null = null;
-
-    if (sourceKey instanceof BinaryExpression) {
-      // The left side should be a column expression
-      if (sourceKey.getLeft() instanceof ColumnExpression) {
-        sourceColumn = sourceKey.getLeft() as ColumnExpression;
+      // Try to extract property pattern: x => x.propertyName
+      const propertyMatch = fnStr.match(/=>\s*\w+\.(\w+)/);
+      if (propertyMatch && propertyMatch[1]) {
+        return propertyMatch[1];
       }
-    }
 
-    if (targetKey instanceof BinaryExpression) {
-      // The left side should be a column expression
-      if (targetKey.getLeft() instanceof ColumnExpression) {
-        targetColumn = targetKey.getLeft() as ColumnExpression;
+      // If that didn't work, try to extract from any return statement
+      const returnMatch = fnStr.match(/return\s+\w+\.(\w+)/);
+      if (returnMatch && returnMatch[1]) {
+        return returnMatch[1];
       }
+
+      throw new Error(`Could not extract property name from selector: ${fnStr}`);
+    };
+
+    // Extract property names
+    try {
+      const sourcePropertyName = getPropertyFromSelector(sourceKeySelector);
+      const targetPropertyName = getPropertyFromSelector(targetKeySelector);
+
+      // Create column expressions
+      const sourceColumn = this.expressionBuilder.createColumn(sourcePropertyName, this.alias);
+      const targetColumn = this.expressionBuilder.createColumn(targetPropertyName, targetAlias);
+
+      // Create the join condition
+      const joinCondition = this.expressionBuilder.createEqual(sourceColumn, targetColumn);
+
+      // Create the join expression
+      const joinExpr = this.expressionBuilder.createJoin(targetTable, joinCondition, joinType);
+
+      // Add the join to the query
+      newQueryable.joins.push(joinExpr);
+
+      return newQueryable;
+    } catch (error: any) {
+      console.error('Error in join method:', error);
+      throw new Error('Could not extract join keys from selectors: ' + error.message);
     }
-
-    if (!sourceColumn || !targetColumn) {
-      throw new Error('Could not extract join keys from selectors');
-    }
-
-    // Create the join condition
-    const joinCondition = this.expressionBuilder.createEqual(sourceColumn, targetColumn);
-
-    // Create the join expression
-    const joinExpr = this.expressionBuilder.createJoin(targetTable, joinCondition, joinType);
-
-    // Add the join to the query
-    newQueryable.joins.push(joinExpr);
-
-    return newQueryable;
   }
 
   /**
@@ -216,22 +278,16 @@ export class Queryable<T> {
     // Create a new queryable
     const newQueryable = this.clone();
 
-    // Parse the selector into an expression
-    const selectorExpr = this.lambdaParser.parsePredicate(
-      entity => selector(entity) !== null,
-      this.alias,
-    );
+    // Extract the column name from the selector function
+    const fnStr = selector.toString();
+    const propertyMatch = fnStr.match(/=>\s*\w+\.(\w+)/);
 
-    // Extract the column expression from the condition
-    let column: Expression | null = null;
-
-    if (selectorExpr instanceof BinaryExpression) {
-      // The left side should be a column expression
-      column = selectorExpr.getLeft();
-    } else {
-      // Use the selector expression itself
-      column = selectorExpr;
+    if (!propertyMatch || !propertyMatch[1]) {
+      throw new Error(`Could not extract property name from selector: ${fnStr}`);
     }
+
+    // Create a column expression for the extracted property
+    const column = this.expressionBuilder.createColumn(propertyMatch[1], this.alias);
 
     // Create the order by expression
     const orderByExpr = this.expressionBuilder.createOrderBy(
@@ -253,28 +309,30 @@ export class Queryable<T> {
     // Create a new queryable
     const newQueryable = this.clone();
 
-    // For simplicity, we'll assume the selector returns an array of columns
-    // In a real implementation, we would parse the selector to extract the columns
+    // For groupBy we might get an array of columns
+    const fnStr = selector.toString();
 
-    // For now, we'll hack it by parsing the selector as a predicate
-    const selectorExpr = this.lambdaParser.parsePredicate(
-      entity => selector(entity).length > 0,
-      this.alias,
-    );
+    // Try to extract properties from the array literal
+    const propertiesMatch = fnStr.match(/\[\s*\w+\.(\w+)(?:\s*,\s*\w+\.(\w+))*\s*\]/);
 
-    // Extract the column expression from the condition
-    let column: Expression | null = null;
-
-    if (selectorExpr instanceof BinaryExpression) {
-      // The left side should be a column expression
-      column = selectorExpr.getLeft();
+    if (propertiesMatch) {
+      // Process all captured groups that may contain property names
+      for (let i = 1; i < propertiesMatch.length; i++) {
+        if (propertiesMatch[i]) {
+          const column = this.expressionBuilder.createColumn(propertiesMatch[i], this.alias);
+          newQueryable.groupByColumns.push(column);
+        }
+      }
     } else {
-      // Use the selector expression itself
-      column = selectorExpr;
+      // Handle single property case
+      const propertyMatch = fnStr.match(/=>\s*\w+\.(\w+)/);
+      if (propertyMatch && propertyMatch[1]) {
+        const column = this.expressionBuilder.createColumn(propertyMatch[1], this.alias);
+        newQueryable.groupByColumns.push(column);
+      } else {
+        throw new Error(`Could not extract properties from groupBy selector: ${fnStr}`);
+      }
     }
-
-    // Add the column to the group by
-    newQueryable.groupByColumns.push(column);
 
     return newQueryable;
   }
@@ -288,7 +346,7 @@ export class Queryable<T> {
     const newQueryable = this.clone();
 
     // Parse the predicate into an expression
-    const predicateExpr = this.lambdaParser.parsePredicate(predicate, this.alias);
+    const predicateExpr = this.lambdaParser.parsePredicate<T>(predicate, this.alias);
 
     // If there's already a having clause, AND it with the new one
     if (newQueryable.havingClause) {
@@ -356,19 +414,14 @@ export class Queryable<T> {
     let countExpr: Expression | null = null;
 
     if (selector) {
-      // Parse the selector into an expression
-      const selectorExpr = this.lambdaParser.parsePredicate(
-        entity => selector(entity) !== null,
-        this.alias,
-      );
+      // Extract the column name
+      const fnStr = selector.toString();
+      const propertyMatch = fnStr.match(/=>\s*\w+\.(\w+)/);
 
-      // Extract the column expression from the condition
-      if (selectorExpr instanceof BinaryExpression) {
-        // The left side should be a column expression
-        countExpr = selectorExpr.getLeft();
+      if (propertyMatch && propertyMatch[1]) {
+        countExpr = this.expressionBuilder.createColumn(propertyMatch[1], this.alias);
       } else {
-        // Use the selector expression itself
-        countExpr = selectorExpr;
+        throw new Error(`Could not extract property from count selector: ${fnStr}`);
       }
     }
 
@@ -389,22 +442,16 @@ export class Queryable<T> {
     // Create a new queryable with the new result type
     const newQueryable = this.cloneWithNewType<TResult>();
 
-    // Parse the selector into an expression
-    const selectorExpr = this.lambdaParser.parsePredicate(
-      entity => selector(entity) !== null,
-      this.alias,
-    );
+    // Extract the column name
+    const fnStr = selector.toString();
+    const propertyMatch = fnStr.match(/=>\s*\w+\.(\w+)/);
 
-    // Extract the column expression from the condition
-    let column: Expression | null = null;
-
-    if (selectorExpr instanceof BinaryExpression) {
-      // The left side should be a column expression
-      column = selectorExpr.getLeft();
-    } else {
-      // Use the selector expression itself
-      column = selectorExpr;
+    if (!propertyMatch || !propertyMatch[1]) {
+      throw new Error(`Could not extract property from max selector: ${fnStr}`);
     }
+
+    // Create column expression
+    const column = this.expressionBuilder.createColumn(propertyMatch[1], this.alias);
 
     // Create the MAX function
     const maxFunc = this.expressionBuilder.createMax(column);
@@ -424,7 +471,7 @@ export class Queryable<T> {
     const newQueryable = this.cloneWithNewType<TResult>();
 
     // Parse the selector into an expression
-    const selectorExpr = this.lambdaParser.parsePredicate(
+    const selectorExpr = this.lambdaParser.parsePredicate<T>(
       entity => selector(entity) !== null,
       this.alias,
     );
@@ -458,7 +505,7 @@ export class Queryable<T> {
     const newQueryable = this.cloneWithNewType<TResult>();
 
     // Parse the selector into an expression
-    const selectorExpr = this.lambdaParser.parsePredicate(
+    const selectorExpr = this.lambdaParser.parsePredicate<T>(
       entity => selector(entity) !== null,
       this.alias,
     );
@@ -492,7 +539,7 @@ export class Queryable<T> {
     const newQueryable = this.cloneWithNewType<TResult>();
 
     // Parse the selector into an expression
-    const selectorExpr = this.lambdaParser.parsePredicate(
+    const selectorExpr = this.lambdaParser.parsePredicate<T>(
       entity => selector(entity) !== null,
       this.alias,
     );
@@ -542,7 +589,7 @@ export class Queryable<T> {
     const sql = selectExpr.accept(visitor);
 
     // Format the SQL
-    return visitor.formatSql(sql);
+    return formatSQLClientStyle(sql);
   }
 
   /**
