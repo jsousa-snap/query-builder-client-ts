@@ -1,3 +1,4 @@
+// src/core/context/DbContext.ts
 import { DbSet } from './DbSet';
 
 /**
@@ -6,12 +7,32 @@ import { DbSet } from './DbSet';
  */
 export class DbContext {
   private dbSets: Map<string, DbSet<any>> = new Map();
+  private usedAliases: Set<string> = new Set<string>();
 
   /**
    * Creates a new database context
    */
   constructor() {
     // Could accept connection parameters in a real implementation
+  }
+
+  /**
+   * Generates a unique alias for a table
+   * @param tableName The table name
+   * @returns A unique alias
+   */
+  private generateUniqueAlias(tableName: string): string {
+    let baseAlias = tableName.charAt(0).toLowerCase();
+    let alias = baseAlias;
+    let counter = 1;
+
+    while (this.usedAliases.has(alias)) {
+      alias = `${baseAlias}${counter}`;
+      counter++;
+    }
+
+    this.usedAliases.add(alias);
+    return alias;
   }
 
   /**
@@ -25,8 +46,11 @@ export class DbContext {
       return this.dbSets.get(tableName) as DbSet<T>;
     }
 
-    // Create a new DbSet
-    const dbSet = new DbSet<T>(tableName);
+    // Generate a unique alias
+    const alias = this.generateUniqueAlias(tableName);
+
+    // Create a new DbSet with the unique alias
+    const dbSet = new DbSet<T>(tableName, alias);
     this.dbSets.set(tableName, dbSet);
     return dbSet;
   }

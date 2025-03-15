@@ -1,3 +1,4 @@
+// src/core/context/DbSet.ts
 import { Queryable } from '../query/Queryable';
 import { JoinType } from '../expressions/JoinExpression';
 import { OrderDirection } from '../query/Types';
@@ -7,16 +8,15 @@ import { OrderDirection } from '../query/Types';
  * Provides methods to create queries against the table
  */
 export class DbSet<T> {
-  private readonly alias: string;
-
   /**
    * Creates a new DbSet
    * @param tableName The name of the database table
+   * @param alias The unique alias for the table
    */
-  constructor(private readonly tableName: string) {
-    // Generate a default alias from the first character of the table name
-    this.alias = tableName.charAt(0).toLowerCase();
-  }
+  constructor(
+    private readonly tableName: string,
+    private readonly alias: string,
+  ) {}
 
   /**
    * Gets the table name

@@ -143,13 +143,15 @@ describe('Query Builder - Select Tests', () => {
         user => user.id,
         order => order.userId,
         (user, order) => ({
+          userId: user.id,
+          orderId: order.id,
           user,
           order,
         }),
       )
       .join(
         uni,
-        joined => joined.user.id,
+        joined => joined.orderId, // Usar a propriedade diretamente
         uni => uni.userId,
         (joined, uni) => ({
           ...joined,

@@ -221,49 +221,60 @@ export class Queryable<T> {
     // Create the target table expression
     const targetTable = this.expressionBuilder.createTable(targetTableName, targetAlias);
 
-    // Use a more direct approach for extracting column names
-    // We'll examine the function source to get the property name
-    const getPropertyFromSelector = (selector: Function): string => {
-      const fnStr = selector.toString();
+    // Extract source property path using a more complex regex
+    const sourceFnStr = sourceKeySelector.toString();
+    // Esta regex captura caminhos aninhados como joined.user.id
+    const sourcePropertyMatch = sourceFnStr.match(/=>\s*\w+(?:\.(\w+))+$/);
 
-      // Try to extract property pattern: x => x.propertyName
-      const propertyMatch = fnStr.match(/=>\s*\w+\.(\w+)/);
-      if (propertyMatch && propertyMatch[1]) {
-        return propertyMatch[1];
+    let sourceColumn: Expression;
+
+    if (sourcePropertyMatch) {
+      // Extrai o caminho completo
+      const fullPath = sourceFnStr.match(/=>\s*(\w+(?:\.\w+)+)$/)?.[1];
+      if (!fullPath) {
+        throw new Error(
+          `Could not extract property path from source join selector: ${sourceFnStr}`,
+        );
       }
 
-      // If that didn't work, try to extract from any return statement
-      const returnMatch = fnStr.match(/return\s+\w+\.(\w+)/);
-      if (returnMatch && returnMatch[1]) {
-        return returnMatch[1];
+      // Para simplificar, vamos extrair apenas o último nível do caminho
+      // Em uma implementação completa, você precisaria analisar e resolver todo o caminho
+      const pathParts = fullPath.split('.');
+      const lastProperty = pathParts[pathParts.length - 1];
+
+      // Você precisaria fazer lookup para determinar o alias correto da tabela
+      // Para simplificar neste exemplo, assumimos que é a tabela base
+      sourceColumn = this.expressionBuilder.createColumn(lastProperty, this.alias);
+    } else {
+      // Caso simples: user => user.id
+      const simplePropMatch = sourceFnStr.match(/=>\s*\w+\.(\w+)/);
+      if (!simplePropMatch || !simplePropMatch[1]) {
+        throw new Error(`Could not extract property from source join selector: ${sourceFnStr}`);
       }
-
-      throw new Error(`Could not extract property name from selector: ${fnStr}`);
-    };
-
-    // Extract property names
-    try {
-      const sourcePropertyName = getPropertyFromSelector(sourceKeySelector);
-      const targetPropertyName = getPropertyFromSelector(targetKeySelector);
-
-      // Create column expressions
-      const sourceColumn = this.expressionBuilder.createColumn(sourcePropertyName, this.alias);
-      const targetColumn = this.expressionBuilder.createColumn(targetPropertyName, targetAlias);
-
-      // Create the join condition
-      const joinCondition = this.expressionBuilder.createEqual(sourceColumn, targetColumn);
-
-      // Create the join expression
-      const joinExpr = this.expressionBuilder.createJoin(targetTable, joinCondition, joinType);
-
-      // Add the join to the query
-      newQueryable.joins.push(joinExpr);
-
-      return newQueryable;
-    } catch (error: any) {
-      console.error('Error in join method:', error);
-      throw new Error('Could not extract join keys from selectors: ' + error.message);
+      sourceColumn = this.expressionBuilder.createColumn(simplePropMatch[1], this.alias);
     }
+
+    // Extract target property name (semelhante ao código anterior)
+    const targetFnStr = targetKeySelector.toString();
+    const targetPropertyMatch = targetFnStr.match(/=>\s*\w+\.(\w+)/);
+
+    if (!targetPropertyMatch || !targetPropertyMatch[1]) {
+      throw new Error(`Could not extract property from target join selector: ${targetFnStr}`);
+    }
+
+    // Create target column expression
+    const targetColumn = this.expressionBuilder.createColumn(targetPropertyMatch[1], targetAlias);
+
+    // Create the join condition
+    const joinCondition = this.expressionBuilder.createEqual(sourceColumn, targetColumn);
+
+    // Create the join expression
+    const joinExpr = this.expressionBuilder.createJoin(targetTable, joinCondition, joinType);
+
+    // Add the join to the query
+    newQueryable.joins.push(joinExpr);
+
+    return newQueryable;
   }
 
   /**
