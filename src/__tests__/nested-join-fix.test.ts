@@ -53,6 +53,32 @@ describe('Rastreamento de Propriedades Aninhadas', () => {
     dbContext = new DbContext();
   });
 
+  test('dicionario', () => {
+    const db = new DbContext();
+    const tabelas = db.set('SSDD00');
+    const campos = db.set('SSDD00');
+
+    const query = tabelas
+      .where(tabela => tabela.recordType === 0)
+      .select(tabela => ({
+        ukey: tabela.ukey,
+        code: tabela.code,
+      }))
+      .withSubquery(
+        'campos',
+        campos,
+        tabela => tabela.ukey,
+        campo => campo.ukSSDD00,
+        query =>
+          query.select(campo => ({
+            ukey: campo.ukey,
+            code: campo.code,
+          })),
+      );
+
+    console.log(query.toQueryString());
+  });
+
   test('subquery', () => {
     const db = new DbContext();
     const users = db.set('users');
@@ -97,7 +123,10 @@ describe('Rastreamento de Propriedades Aninhadas', () => {
         comments,
         joined => joined.post.id,
         comment => comment.postId,
-        query => query.count(),
+        query =>
+          query
+            .where(comment => comment.timestamp > '2025-01-01')
+            .select(comment => ({ message: comment.message, timestamp: comment.timestamp })),
       )
       .select(joined => ({
         userName: joined.user.name,

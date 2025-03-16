@@ -40,18 +40,31 @@ export class DbContext {
    * @param tableName The name of the database table
    * @returns A DbSet for the table
    */
-  set<T = any>(tableName: string): DbSet<T> {
-    // Check if we already have a DbSet for this table
-    if (this.dbSets.has(tableName)) {
-      return this.dbSets.get(tableName) as DbSet<T>;
+  set<T = any>(tableName: string, customAlias?: string): DbSet<T> {
+    // Determinar qual alias usar
+    const alias = customAlias ? customAlias : this.generateUniqueAlias(tableName);
+
+    // Se tentarmos usar um alias já em uso, geramos um erro
+    if (customAlias && this.usedAliases.has(customAlias)) {
+      throw new Error(`Alias "${customAlias}" already in use. Please choose a different alias.`);
     }
 
-    // Generate a unique alias
-    const alias = this.generateUniqueAlias(tableName);
+    // Criar ID único para tabela+alias
+    const setId = `${tableName}_${alias}`;
 
-    // Create a new DbSet with the unique alias
+    // Check if we already have a DbSet for this table+alias combination
+    if (this.dbSets.has(setId)) {
+      return this.dbSets.get(setId) as DbSet<T>;
+    }
+
+    // Se estamos usando um alias customizado, registrá-lo para evitar duplicatas
+    if (customAlias) {
+      this.usedAliases.add(customAlias);
+    }
+
+    // Create a new DbSet with the alias
     const dbSet = new DbSet<T>(tableName, alias);
-    this.dbSets.set(tableName, dbSet);
+    this.dbSets.set(setId, dbSet);
     return dbSet;
   }
 }
