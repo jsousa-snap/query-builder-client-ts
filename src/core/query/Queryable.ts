@@ -8,8 +8,6 @@ import {
   JoinResultSelector,
   AggregateSelector,
   OrderDirection,
-  SubqueryBuilder,
-  SubqueryHelper,
 } from './Types';
 
 import { JoinType, JoinExpression } from '../expressions/JoinExpression';
@@ -22,10 +20,8 @@ import { Expression } from '../expressions/Expression';
 import { ProjectionExpression } from '../expressions/ProjectionExpression';
 import { ColumnExpression } from '../expressions/ColumnExpression';
 import { BinaryExpression } from '../expressions/BinaryExpression';
-import { formatSQL, formatSQLClientStyle } from '../../utils/SqlFormatter';
-import { PropertyTracker, PropertySource } from './PropertyTracker';
-import { FunctionExpression } from '../expressions/FunctionExpression';
-import { ParentColumnRef } from '../expressions/ParentColumnRef';
+import { formatSQLClientStyle } from '../../utils/SqlFormatter';
+import { PropertyTracker } from './PropertyTracker';
 import { SubqueryExpression } from '../expressions/SubqueryExpression';
 
 class ResultInfo {

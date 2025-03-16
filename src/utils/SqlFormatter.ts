@@ -200,7 +200,7 @@ export function formatSQL(sql: string, options: SqlFormatterOptions = {}): strin
       indentLevel = 0;
 
       // Adicionar palavra-chave com quebra de linha
-      lines.push(`\n${highlightKeyword(clause)}`);
+      lines.push(`${highlightKeyword(clause)}`);
     }
     // Processar conteúdo da cláusula SELECT
     else if (i > 0 && clauses[i - 1].toUpperCase() === 'SELECT') {

@@ -3,6 +3,7 @@
 import { DbContext } from '../core/context/DbContext';
 import { JoinType } from '../core/expressions/JoinExpression';
 import { OrderDirection } from '../core/query/Types';
+import { ExpressionSerializer } from '../utils/ExpressionSerializer';
 
 /**
  * Removes all whitespace characters (spaces, tabs, newlines) from a string
@@ -77,6 +78,10 @@ describe('Rastreamento de Propriedades Aninhadas', () => {
       );
 
     console.log(query.toQueryString());
+
+    const queryJson = ExpressionSerializer.serialize(query.toMetadata());
+
+    console.log(JSON.stringify(queryJson, null, 2));
   });
 
   test('subquery', () => {

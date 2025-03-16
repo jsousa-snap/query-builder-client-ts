@@ -128,16 +128,6 @@ export class ExpressionBuilder {
     );
   }
 
-  // Adicione este método ao ExpressionBuilder em src/core/query/ExpressionBuilder.ts
-  /**
-   * Cria uma expressão que referencia uma coluna de uma tabela pai
-   * @param columnName Nome da coluna
-   * @param tableAlias Alias da tabela
-   */
-  createParentColumnRef(columnName: string, tableAlias: string): ParentColumnExpression {
-    return new ParentColumnExpression(tableAlias, columnName);
-  }
-
   /**
    * Creates a COUNT function expression
    */
