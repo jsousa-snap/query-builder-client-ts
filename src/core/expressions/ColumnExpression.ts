@@ -1,4 +1,8 @@
-import { Expression, ExpressionVisitor, ColumnExpression as IColumnExpression } from './Expression';
+import {
+  Expression,
+  IExpressionVisitor,
+  IColumnExpression as IColumnExpression,
+} from './Expression';
 
 /**
  * Represents a reference to a column in a table
@@ -29,7 +33,7 @@ export class ColumnExpression extends Expression implements IColumnExpression {
   /**
    * Accepts a visitor
    */
-  accept<T>(visitor: ExpressionVisitor<T>): T {
+  accept<T>(visitor: IExpressionVisitor<T>): T {
     return visitor.visitColumnExpression(this);
   }
 }

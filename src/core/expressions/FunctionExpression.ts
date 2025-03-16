@@ -1,7 +1,7 @@
 import {
   Expression,
-  ExpressionVisitor,
-  FunctionExpression as IFunctionExpression,
+  IExpressionVisitor,
+  IFunctionExpression as IFunctionExpression,
 } from './Expression';
 
 /**
@@ -33,7 +33,7 @@ export class FunctionExpression extends Expression implements IFunctionExpressio
   /**
    * Accepts a visitor
    */
-  accept<T>(visitor: ExpressionVisitor<T>): T {
+  accept<T>(visitor: IExpressionVisitor<T>): T {
     return visitor.visitFunctionExpression(this);
   }
 }

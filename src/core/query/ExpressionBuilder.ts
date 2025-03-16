@@ -7,11 +7,12 @@ import { FunctionExpression } from '../expressions/FunctionExpression';
 import { SelectExpression, OrderByExpression } from '../expressions/SelectExpression';
 import { TableExpression } from '../expressions/TableExpression';
 import { JoinExpression, JoinType } from '../expressions/JoinExpression';
-import { SubqueryExpression } from '../expressions/SubqueryExpression';
+import { ScalarSubqueryExpression } from '../expressions/ScalarSubqueryExpression';
 import { ProjectionExpression } from '../expressions/ProjectionExpression';
 import { ParameterExpression } from '../expressions/ParameterExpression';
 import { OrderDirection } from './Types';
 import { ParentColumnExpression } from '../expressions/ParentColumnExpression';
+import { FragmentExpression } from '../expressions/FragmentExpression';
 
 /**
  * Builds expression trees for SQL queries
@@ -37,6 +38,13 @@ export class ExpressionBuilder {
    */
   createConstant(value: any): ConstantExpression {
     return new ConstantExpression(value);
+  }
+
+  /**
+   * Creates a constant expression
+   */
+  createFragment(value: string): FragmentExpression {
+    return new FragmentExpression(value);
   }
 
   /**
@@ -88,8 +96,8 @@ export class ExpressionBuilder {
   /**
    * Creates a subquery expression
    */
-  createSubquery(query: SelectExpression): SubqueryExpression {
-    return new SubqueryExpression(query);
+  createSubquery(query: SelectExpression): ScalarSubqueryExpression {
+    return new ScalarSubqueryExpression(query);
   }
 
   /**
@@ -134,7 +142,7 @@ export class ExpressionBuilder {
   createCount(expression: Expression | null = null): FunctionExpression {
     // If no expression is provided, use COUNT(*)
     if (!expression) {
-      expression = this.createConstant('*');
+      expression = this.createFragment('*');
     }
     return this.createFunction('COUNT', [expression]);
   }

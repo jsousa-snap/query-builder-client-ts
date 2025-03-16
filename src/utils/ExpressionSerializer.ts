@@ -6,7 +6,7 @@ import { FunctionExpression } from '../core/expressions/FunctionExpression';
 import { SelectExpression, OrderByExpression } from '../core/expressions/SelectExpression';
 import { TableExpression } from '../core/expressions/TableExpression';
 import { JoinExpression } from '../core/expressions/JoinExpression';
-import { SubqueryExpression } from '../core/expressions/SubqueryExpression';
+import { ScalarSubqueryExpression } from '../core/expressions/ScalarSubqueryExpression';
 import { ProjectionExpression } from '../core/expressions/ProjectionExpression';
 import { ParameterExpression } from '../core/expressions/ParameterExpression';
 
@@ -65,7 +65,7 @@ export class ExpressionSerializer {
       return this.serializeJoinExpression(expr);
     }
 
-    if (expr instanceof SubqueryExpression) {
+    if (expr instanceof ScalarSubqueryExpression) {
       return this.serializeSubqueryExpression(expr);
     }
 
@@ -185,7 +185,7 @@ export class ExpressionSerializer {
   /**
    * Serializa uma expressão de subconsulta
    */
-  private static serializeSubqueryExpression(expr: SubqueryExpression): ExpressionJson {
+  private static serializeSubqueryExpression(expr: ScalarSubqueryExpression): ExpressionJson {
     return {
       type: 'SubqueryExpression',
       query: this.serialize(expr.getQuery()),

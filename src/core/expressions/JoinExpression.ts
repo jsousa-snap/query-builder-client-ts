@@ -1,8 +1,8 @@
 import {
   Expression,
-  ExpressionVisitor,
-  JoinExpression as IJoinExpression,
-  TableExpression,
+  IExpressionVisitor,
+  IJoinExpression as IJoinExpression,
+  ITableExpression,
 } from './Expression';
 
 /**
@@ -20,7 +20,7 @@ export enum JoinType {
  */
 export class JoinExpression extends Expression implements IJoinExpression {
   constructor(
-    private readonly targetTable: TableExpression,
+    private readonly targetTable: ITableExpression,
     private readonly joinCondition: Expression,
     private readonly joinType: JoinType,
   ) {
@@ -30,7 +30,7 @@ export class JoinExpression extends Expression implements IJoinExpression {
   /**
    * Gets the table being joined
    */
-  getTargetTable(): TableExpression {
+  getTargetTable(): ITableExpression {
     return this.targetTable;
   }
 
@@ -51,7 +51,7 @@ export class JoinExpression extends Expression implements IJoinExpression {
   /**
    * Accepts a visitor
    */
-  accept<T>(visitor: ExpressionVisitor<T>): T {
+  accept<T>(visitor: IExpressionVisitor<T>): T {
     return visitor.visitJoinExpression(this);
   }
 }

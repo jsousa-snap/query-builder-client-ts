@@ -1,4 +1,4 @@
-import { Expression, ExpressionVisitor } from './Expression';
+import { Expression, IExpressionVisitor } from './Expression';
 import { ProjectionExpression } from './ProjectionExpression';
 import { TableExpression } from './TableExpression';
 import { JoinExpression } from './JoinExpression';
@@ -95,7 +95,7 @@ export class SelectExpression extends Expression {
   /**
    * Accepts a visitor
    */
-  accept<T>(visitor: ExpressionVisitor<T>): T {
+  accept<T>(visitor: IExpressionVisitor<T>): T {
     return visitor.visitSelectExpression(this);
   }
 }

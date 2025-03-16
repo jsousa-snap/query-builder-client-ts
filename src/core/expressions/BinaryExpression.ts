@@ -1,8 +1,8 @@
 import {
   Expression,
   ExpressionType,
-  ExpressionVisitor,
-  BinaryExpression as IBinaryExpression,
+  IExpressionVisitor,
+  IBinaryExpression as IBinaryExpression,
 } from './Expression';
 
 /**
@@ -68,7 +68,7 @@ export class BinaryExpression extends Expression implements IBinaryExpression {
   /**
    * Accepts a visitor
    */
-  accept<T>(visitor: ExpressionVisitor<T>): T {
+  accept<T>(visitor: IExpressionVisitor<T>): T {
     return visitor.visitBinaryExpression(this);
   }
 }

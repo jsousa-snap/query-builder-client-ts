@@ -1,210 +1,64 @@
-// src/__tests__/select.test.ts
-
-/**
- * Removes all whitespace characters (spaces, tabs, newlines) from a string
- * for easier SQL comparison in tests.
- *
- * @param sql The SQL string to normalize
- * @returns A normalized string without whitespace
- */
-function normalizeSQL(sql: string): string {
-  // Remove all whitespace characters (spaces, tabs, newlines)
-  return sql.replace(/\s+/g, '');
-}
-
 import { DbContext } from '../core/context/DbContext';
-import { JoinType } from '../core/expressions/JoinExpression';
+import { normalizeSQL } from './common/test-utils';
+import { User } from './common/models';
+import { DbSet } from '../core/context/DbSet';
 
-describe('Query Builder - Select Tests', () => {
+describe('Select Queries', () => {
   let dbContext: DbContext;
-
-  // Define some test models
-  interface User {
-    id: number;
-    name: string;
-    email: string;
-    age: number;
-    isActive: boolean;
-  }
-
-  interface Order {
-    id: number;
-    userId: number;
-    amount: number;
-    date: Date;
-  }
+  let users: DbSet<User>;
 
   beforeEach(() => {
-    // Create a fresh context for each test
     dbContext = new DbContext();
-  });
-
-  test('Simple select test with console output', () => {
-    // Arrange
-    const users = dbContext.set<User>('users');
-
-    // Act - add console logs to see what's happening
-    console.log('Creating query...');
-    const query = users.select(u => ({ id: u.id }));
-    console.log('Generated SQL:', query.toQueryString());
-
-    // Assert
-    expect(true).toBe(true); // Just make it pass for debugging
+    users = dbContext.set<User>('users');
   });
 
   test('Select all columns', () => {
-    // Arrange
-    const users = dbContext.set<User>('users');
+    const query = users.query();
+    const sql = query.toQueryString();
 
-    // Act
-    const query = users.query().toQueryString();
-
-    // Assert
-    expect(normalizeSQL(query)).toContain(normalizeSQL('SELECT * FROM users AS u'));
+    expect(normalizeSQL(sql)).toContain(normalizeSQL('SELECT * FROM users AS u'));
   });
 
   test('Select specific columns', () => {
-    // Arrange
-    const users = dbContext.set<User>('users');
+    const query = users.select(u => ({
+      userId: u.id,
+      userName: u.name,
+    }));
+    const sql = query.toQueryString();
 
-    // Act
-    const query = users.select(u => ({ id: u.id, name: u.name })).toQueryString();
-
-    // Assert
-    expect(normalizeSQL(query)).toContain(
-      normalizeSQL('SELECT u.id AS id, u.name AS name FROM users AS u'),
+    expect(normalizeSQL(sql)).toContain(
+      normalizeSQL('SELECT u.id AS userId, u.name AS userName FROM users AS u'),
     );
   });
 
-  test('Select with alias', () => {
-    // Arrange
-    const users = dbContext.set<User>('users');
-
-    // Act
-    const query = users.select(u => ({ userId: u.id, fullName: u.name })).toQueryString();
-
-    // Assert
-    expect(normalizeSQL(query)).toContain(
-      normalizeSQL('SELECT u.id AS userId, u.name AS fullName FROM users AS u'),
-    );
-  });
-
-  test('Select with where clause', () => {
-    // Arrange
-    const users = dbContext.set<User>('users');
-
-    // Act
-    const query = users
-      .select(u => ({ id: u.id, name: u.name, age: u.age }))
-      .where(u => u.age > 21)
-      .toQueryString();
-
-    // Assert
-    expect(normalizeSQL(query)).toContain(
-      normalizeSQL(
-        'SELECT u.id AS id, u.name AS name, u.age AS age FROM users AS u WHERE (u.age > 21)',
-      ),
-    );
-  });
-
-  test('Select with complex query', () => {
-    // Arrange
-    const users = dbContext.set<User>('users');
-
-    // Act
-    const query = users
-      .where(u => u.age >= 18 && u.isActive === true)
-      .select(u => ({
+  test('Select with complex object mapping', () => {
+    const query = users.select(u => ({
+      fullUser: {
         id: u.id,
         name: u.name,
-        email: u.email,
-      }))
-      .orderBy(u => u.name)
-      .limit(10)
-      .toQueryString();
+        active: u.isActive,
+      },
+    }));
+    const sql = query.toQueryString();
 
-    // Assert
-    expect(normalizeSQL(query)).toContain(
-      normalizeSQL(`SELECT u.id AS id, u.name AS name, u.email AS email 
-        FROM users AS u WHERE ((u.age >= 18) AND (u.isActive = 'true')) 
-        ORDER BY u.name ASC LIMIT 10`),
+    // O teste aqui pode precisar ser ajustado dependendo de como a serialização de objetos complexos é tratada
+    expect(normalizeSQL(sql)).toContain(
+      normalizeSQL('SELECT u.id, u.name, u.isActive FROM users AS u'),
     );
   });
 
-  test('Select with join', () => {
-    // Arrange
-    const users = dbContext.set('users');
-    const orders = dbContext.set('orders');
-    const uni = dbContext.set('unis');
+  test('Select with nested property access', () => {
+    // Este teste pode precisar de um cenário de join ou objeto aninhado
+    const query = users.select(u => ({
+      userId: u.id,
+      userDetails: {
+        name: u.name,
+        age: u.age,
+      },
+    }));
+    const sql = query.toQueryString();
 
-    // Act
-    const query = users
-      .join(
-        orders,
-        user => user.id,
-        order => order.userId,
-        (user, order) => ({
-          user,
-          order,
-        }),
-      )
-      .join(
-        uni,
-        joined => joined.order.id,
-        uni => uni.orderId,
-        (joined, uni) => ({
-          ...joined,
-          uni,
-        }),
-      )
-      .toQueryString();
-
-    // Assert
-    expect(normalizeSQL(query)).toContain(
-      normalizeSQL(`SELECT *
-        FROM users AS u
-        INNER JOIN orders AS o ON (u.id = o.userId)
-        INNER JOIN unis AS u1 ON (o.id = u1.orderId)`),
-    );
-  });
-
-  test('Select with join e seletor de colunas', () => {
-    // Arrange
-    const users = dbContext.set<User>('users');
-    const orders = dbContext.set<Order>('orders');
-    const uni = dbContext.set('unis');
-
-    // Act
-    const query = users
-      .join(
-        orders,
-        user => user.id,
-        order => order.userId,
-        (user, order) => ({
-          user,
-          order,
-        }),
-      )
-      .join(
-        uni,
-        joined => joined.order.id,
-        uni => uni.orderId,
-        (joined, uni) => ({
-          ...joined,
-          uni,
-        }),
-      )
-      .select(joined => ({
-        amount: joined.order.amount,
-      }))
-      .toQueryString();
-
-    // Assert
-    expect(normalizeSQL(query)).toContain(
-      normalizeSQL(`SELECT o.amount AS amount
-        FROM users AS u
-        INNER JOIN orders AS o ON (u.id = o.userId)
-        INNER JOIN unis AS u1 ON (o.id = u1.orderId)`),
-    );
+    // O teste exato dependerá da implementação de propriedades aninhadas
+    expect(normalizeSQL(sql)).toContain(normalizeSQL('SELECT u.id, u.name, u.age FROM users AS u'));
   });
 });

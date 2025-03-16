@@ -22,7 +22,7 @@ import { ColumnExpression } from '../expressions/ColumnExpression';
 import { BinaryExpression } from '../expressions/BinaryExpression';
 import { formatSQLClientStyle } from '../../utils/SqlFormatter';
 import { PropertyTracker } from './PropertyTracker';
-import { SubqueryExpression } from '../expressions/SubqueryExpression';
+import { ScalarSubqueryExpression } from '../expressions/ScalarSubqueryExpression';
 
 class ResultInfo {
   constructor(
@@ -344,7 +344,7 @@ export class Queryable<T> {
     const existingSubqueries = this.projections.filter(p => {
       const expr = p.getExpression();
       try {
-        return expr instanceof SubqueryExpression;
+        return expr instanceof ScalarSubqueryExpression;
       } catch {
         return false;
       }

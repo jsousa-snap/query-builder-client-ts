@@ -1,7 +1,7 @@
 import {
   Expression,
-  ExpressionVisitor,
-  ParameterExpression as IParameterExpression,
+  IExpressionVisitor,
+  IParameterExpression as IParameterExpression,
 } from './Expression';
 
 /**
@@ -34,7 +34,7 @@ export class ParameterExpression extends Expression implements IParameterExpress
   /**
    * Accepts a visitor
    */
-  accept<T>(visitor: ExpressionVisitor<T>): T {
-    return visitor.visitParameter(this);
+  accept<T>(visitor: IExpressionVisitor<T>): T {
+    return visitor.visitParameterExpression(this);
   }
 }

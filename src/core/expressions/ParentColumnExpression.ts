@@ -1,9 +1,9 @@
-import { Expression, ExpressionVisitor } from './Expression';
+import { Expression, IExpressionVisitor, IParentColumnExpression } from './Expression';
 
 /**
  * Representa uma referência a uma coluna de uma tabela pai em uma subconsulta
  */
-export class ParentColumnExpression extends Expression {
+export class ParentColumnExpression extends Expression implements IParentColumnExpression {
   /**
    * Cria uma nova expressão de coluna pai
    * @param tableAlias Alias da tabela pai
@@ -33,7 +33,7 @@ export class ParentColumnExpression extends Expression {
   /**
    * Aceita um visitante
    */
-  accept<T>(visitor: ExpressionVisitor<T>): T {
+  accept<T>(visitor: IExpressionVisitor<T>): T {
     return visitor.visitParentColumnExpression(this);
   }
 }

@@ -1,21 +1,21 @@
 import { BinaryExpression } from '../expressions/BinaryExpression';
 import { ColumnExpression } from '../expressions/ColumnExpression';
 import { ConstantExpression } from '../expressions/ConstantExpression';
-import { ExpressionType, ExpressionVisitor } from '../expressions/Expression';
+import { ExpressionType, IExpressionVisitor, IFragmentExpression } from '../expressions/Expression';
 import { FunctionExpression } from '../expressions/FunctionExpression';
 import { JoinExpression, JoinType } from '../expressions/JoinExpression';
 import { ParameterExpression } from '../expressions/ParameterExpression';
 import { ParentColumnExpression } from '../expressions/ParentColumnExpression';
 import { ProjectionExpression } from '../expressions/ProjectionExpression';
 import { OrderByExpression, SelectExpression } from '../expressions/SelectExpression';
-import { SubqueryExpression } from '../expressions/SubqueryExpression';
+import { ScalarSubqueryExpression } from '../expressions/ScalarSubqueryExpression';
 import { TableExpression } from '../expressions/TableExpression';
 import { UnaryExpression } from '../expressions/UnaryExpression';
 
 /**
  * A visitor that generates SQL from an expression tree
  */
-export class SqlGenerationVisitor implements ExpressionVisitor<string> {
+export class SqlGenerationVisitor implements IExpressionVisitor<string> {
   private parameters: Map<string, any> = new Map();
 
   /**
@@ -44,6 +44,14 @@ export class SqlGenerationVisitor implements ExpressionVisitor<string> {
     const operator = this.getBinaryOperator(expr.getOperatorType());
 
     return `(${left} ${operator} ${right})`;
+  }
+
+  /**
+   * Visits a fragment expression
+   */
+  visitFragmentExpression(expr: IFragmentExpression): string {
+    const value = expr.getValue();
+    return value;
   }
 
   /**
@@ -187,7 +195,7 @@ export class SqlGenerationVisitor implements ExpressionVisitor<string> {
   /**
    * Visits a subquery expression
    */
-  visitSubqueryExpression(expr: SubqueryExpression): string {
+  visitScalarSubqueryExpression(expr: ScalarSubqueryExpression): string {
     return `(${expr.getQuery().accept(this)})`;
   }
 
@@ -201,7 +209,7 @@ export class SqlGenerationVisitor implements ExpressionVisitor<string> {
   /**
    * Visits a parameter expression
    */
-  visitParameter(expr: ParameterExpression): string {
+  visitParameterExpression(expr: ParameterExpression): string {
     const paramName = expr.getName();
     if (this.parameters.has(paramName)) {
       const value = this.parameters.get(paramName);

@@ -1,7 +1,7 @@
 import {
   Expression,
-  ExpressionVisitor,
-  ConstantExpression as IConstantExpression,
+  IExpressionVisitor,
+  IConstantExpression as IConstantExpression,
 } from './Expression';
 
 /**
@@ -55,7 +55,7 @@ export class ConstantExpression extends Expression implements IConstantExpressio
   /**
    * Accepts a visitor
    */
-  accept<T>(visitor: ExpressionVisitor<T>): T {
+  accept<T>(visitor: IExpressionVisitor<T>): T {
     return visitor.visitConstantExpression(this);
   }
 }

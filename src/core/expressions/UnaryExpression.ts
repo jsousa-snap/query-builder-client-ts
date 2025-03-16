@@ -1,8 +1,8 @@
 import {
   Expression,
   ExpressionType,
-  ExpressionVisitor,
-  UnaryExpression as IUnaryExpression,
+  IExpressionVisitor,
+  IUnaryExpression as IUnaryExpression,
 } from './Expression';
 
 /**
@@ -46,7 +46,7 @@ export class UnaryExpression extends Expression implements IUnaryExpression {
   /**
    * Accepts a visitor
    */
-  accept<T>(visitor: ExpressionVisitor<T>): T {
+  accept<T>(visitor: IExpressionVisitor<T>): T {
     return visitor.visitUnaryExpression(this);
   }
 }
