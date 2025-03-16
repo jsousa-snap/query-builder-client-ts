@@ -349,8 +349,26 @@ export class LambdaParser {
       return this.processNode(node.expression, tableAlias);
     }
 
-    // Padrão: converter para uma constante
-    return this.builder.createConstant(node.getText());
+    switch (node.kind) {
+      case ts.SyntaxKind.StringLiteral:
+        return this.builder.createConstant((node as ts.StringLiteral).text);
+
+      case ts.SyntaxKind.NumericLiteral:
+        return this.builder.createConstant((node as ts.NumericLiteral).text);
+
+      case ts.SyntaxKind.TrueKeyword:
+        return this.builder.createConstant(true);
+
+      case ts.SyntaxKind.FalseKeyword:
+        return this.builder.createConstant(false);
+
+      case ts.SyntaxKind.NullKeyword:
+        return this.builder.createConstant(null);
+
+      default:
+        // Padrão: converter para uma constante (usando o texto original do nó)
+        return this.builder.createConstant(node.getText());
+    }
   }
 
   /**

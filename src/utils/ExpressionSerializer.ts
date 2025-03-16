@@ -187,7 +187,7 @@ export class ExpressionSerializer {
    */
   private static serializeSubqueryExpression(expr: ScalarSubqueryExpression): ExpressionJson {
     return {
-      type: 'SubqueryExpression',
+      type: 'ScalarSubqueryExpression',
       query: this.serialize(expr.getQuery()),
     };
   }

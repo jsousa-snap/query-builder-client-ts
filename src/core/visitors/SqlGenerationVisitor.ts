@@ -89,7 +89,7 @@ export class SqlGenerationVisitor implements IExpressionVisitor<string> {
     }
 
     if (typeof value === 'boolean') {
-      return value ? 'TRUE' : 'FALSE';
+      return value ? '1' : '0';
     }
 
     if (value instanceof Date) {
