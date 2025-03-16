@@ -3,6 +3,8 @@
  * vamos definir interfaces para o visitante. Modifique o arquivo Expression.ts assim:
  */
 
+import { ParentColumnExpression } from './ParentColumnExpression';
+
 /**
  * Base class for all expressions in the query builder.
  */
@@ -28,6 +30,7 @@ export interface ExpressionVisitor<T> {
   visitSubqueryExpression(expr: SubqueryExpression): T;
   visitProjectionExpression(expr: ProjectionExpression): T;
   visitParameter(expr: ParameterExpression): T;
+  visitParentColumnExpression(expr: ParentColumnExpression): T;
 }
 
 /**

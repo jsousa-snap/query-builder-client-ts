@@ -5,6 +5,7 @@ import { ExpressionType, ExpressionVisitor } from '../expressions/Expression';
 import { FunctionExpression } from '../expressions/FunctionExpression';
 import { JoinExpression, JoinType } from '../expressions/JoinExpression';
 import { ParameterExpression } from '../expressions/ParameterExpression';
+import { ParentColumnExpression } from '../expressions/ParentColumnExpression';
 import { ProjectionExpression } from '../expressions/ProjectionExpression';
 import { OrderByExpression, SelectExpression } from '../expressions/SelectExpression';
 import { SubqueryExpression } from '../expressions/SubqueryExpression';
@@ -212,6 +213,13 @@ export class SqlGenerationVisitor implements ExpressionVisitor<string> {
 
     // Parameter not found, return placeholder
     return `@${paramName}`;
+  }
+
+  /**
+   * Visita uma expressão de coluna pai
+   */
+  visitParentColumnExpression(expr: ParentColumnExpression): string {
+    return `${expr.getTableAlias()}.${expr.getColumnName()}`;
   }
 
   /**

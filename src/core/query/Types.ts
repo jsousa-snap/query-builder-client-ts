@@ -2,6 +2,9 @@
  * Defines common types used in query building
  */
 
+import { Expression } from '../expressions/Expression';
+import { Queryable } from './Queryable';
+
 /**
  * Represents the direction of an ORDER BY clause
  */
@@ -47,6 +50,91 @@ export type JoinResultSelector<TSource, TTarget, TResult> = (
  * Function type for selecting columns for aggregation
  */
 export type AggregateSelector<T> = (entity: T) => any;
+
+/**
+ * Contexto para criar subconsultas correlacionadas
+ */
+/**
+ * Helper para referenciar propriedades da consulta principal em uma subconsulta
+ */
+/**
+ * Helper para criar subconsultas correlacionadas
+ */
+export interface SubqueryBuilder<T> {
+  /**
+   * A subconsulta para modificar
+   */
+  query: Queryable<T>;
+
+  /**
+   * Referencia uma coluna da consulta pai
+   * @param columnName Nome da coluna
+   * @param tableAlias Alias opcional da tabela (padrão: alias principal)
+   */
+  parentColumn(columnName: string, tableAlias?: string): Expression;
+
+  /**
+   * Adiciona uma condição WHERE de igualdade entre uma coluna da subconsulta e uma coluna da consulta pai
+   * @param subqueryColumn Nome da coluna na subconsulta
+   * @param parentColumn Nome da coluna na consulta pai
+   * @param parentTableAlias Alias opcional da tabela pai
+   */
+  whereEquals(
+    subqueryColumn: string,
+    parentColumn: string,
+    parentTableAlias?: string,
+  ): SubqueryBuilder<T>;
+
+  /**
+   * Adiciona uma condição WHERE personalizada usando expressões
+   * @param condition Função que constrói a condição usando o builder
+   */
+  whereCondition(condition: (builder: SubqueryBuilder<T>) => Expression): SubqueryBuilder<T>;
+}
+
+/**
+ * Helper para criar subconsultas correlacionadas
+ */
+export interface SubqueryHelper {
+  /**
+   * Referencia uma coluna da consulta pai
+   * @param columnName Nome da coluna
+   * @param tableAlias Alias opcional da tabela (padrão: alias principal)
+   */
+  parentColumn(columnName: string, tableAlias?: string): Expression;
+
+  /**
+   * Cria uma condição de igualdade entre uma coluna da subconsulta e uma coluna da consulta pai
+   * @param subqueryColumn Nome da coluna na subconsulta
+   * @param parentColumn Nome da coluna na consulta pai
+   * @param parentTableAlias Alias opcional da tabela pai
+   */
+  equals(subqueryColumn: string, parentColumn: string, parentTableAlias?: string): Expression;
+
+  /**
+   * Cria uma condição de não-igualdade entre uma coluna da subconsulta e uma coluna da consulta pai
+   * @param subqueryColumn Nome da coluna na subconsulta
+   * @param parentColumn Nome da coluna na consulta pai
+   * @param parentTableAlias Alias opcional da tabela pai
+   */
+  notEquals(subqueryColumn: string, parentColumn: string, parentTableAlias?: string): Expression;
+
+  /**
+   * Cria uma condição de maior que entre uma coluna da subconsulta e uma coluna da consulta pai
+   * @param subqueryColumn Nome da coluna na subconsulta
+   * @param parentColumn Nome da coluna na consulta pai
+   * @param parentTableAlias Alias opcional da tabela pai
+   */
+  greaterThan(subqueryColumn: string, parentColumn: string, parentTableAlias?: string): Expression;
+
+  /**
+   * Cria uma condição de menor que entre uma coluna da subconsulta e uma coluna da consulta pai
+   * @param subqueryColumn Nome da coluna na subconsulta
+   * @param parentColumn Nome da coluna na consulta pai
+   * @param parentTableAlias Alias opcional da tabela pai
+   */
+  lessThan(subqueryColumn: string, parentColumn: string, parentTableAlias?: string): Expression;
+}
 
 /**
  * Interface for the state of a query

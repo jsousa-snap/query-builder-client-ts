@@ -53,6 +53,60 @@ describe('Rastreamento de Propriedades Aninhadas', () => {
     dbContext = new DbContext();
   });
 
+  test('subquery', () => {
+    const db = new DbContext();
+    const users = db.set('users');
+    const posts = db.set('posts');
+    const comments = db.set('comments');
+
+    // Exemplo 1: Consulta simples com subconsulta para contagem de posts
+    const usersWithPostCount = users
+      .select(user => ({
+        id: user.id,
+        name: user.name,
+        email: user.email,
+        qualquerCoisa: '',
+      }))
+      .withSubquery(
+        'postCount',
+        posts,
+        user => user.qualquerCoisa,
+        post => post.userId,
+        query => query.where(x => x.jjj === 'jander').count(),
+      );
+
+    console.log('SQL gerado:');
+    console.log(usersWithPostCount.toQueryString());
+  });
+  test('subquery', () => {
+    const db = new DbContext();
+    const users = db.set('users');
+    const posts = db.set('posts');
+    const comments = db.set('comments');
+
+    const query = users
+      .join(
+        posts,
+        user => user.id,
+        post => post.userId,
+        (user, post) => ({ user, post }),
+      )
+      .withSubquery(
+        'commentCount',
+        comments,
+        joined => joined.post.id,
+        comment => comment.postId,
+        query => query.count(),
+      )
+      .select(joined => ({
+        userName: joined.user.name,
+        postTitle: joined.post.title,
+      }));
+
+    const sql = query.toQueryString();
+    console.log(sql);
+  });
+
   test('Deve rastrear propriedades em objetos aninhados após join', () => {
     // Arrange
     const users = dbContext.set<User>('users');

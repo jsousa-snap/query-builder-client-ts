@@ -8,6 +8,8 @@ import {
   JoinResultSelector,
   AggregateSelector,
   OrderDirection,
+  SubqueryBuilder,
+  SubqueryHelper,
 } from './Types';
 
 import { JoinType, JoinExpression } from '../expressions/JoinExpression';
@@ -23,6 +25,7 @@ import { BinaryExpression } from '../expressions/BinaryExpression';
 import { formatSQL, formatSQLClientStyle } from '../../utils/SqlFormatter';
 import { PropertyTracker, PropertySource } from './PropertyTracker';
 import { FunctionExpression } from '../expressions/FunctionExpression';
+import { ParentColumnRef } from '../expressions/ParentColumnRef';
 
 class ResultInfo {
   constructor(
@@ -180,6 +183,82 @@ export class Queryable<T> {
     return newQueryable;
   }
 
+  /**
+   * Adiciona uma subconsulta à seleção
+   * @param propertyName Nome da propriedade para o resultado da subconsulta
+   * @param subquerySource DbSet fonte para a subconsulta
+   * @param parentSelector Seletor para a coluna da consulta pai
+   * @param subquerySelector Seletor para a coluna da subconsulta
+   * @param subqueryBuilder Função que modifica a subconsulta
+   */
+  withSubquery<U, TResult>(
+    propertyName: string,
+    subquerySource: DbSet<U>,
+    parentSelector: (entity: T) => any,
+    subquerySelector: (entity: U) => any,
+    subqueryBuilder: (query: Queryable<U>) => Queryable<TResult>,
+  ): Queryable<T & Record<string, TResult>> {
+    // Criar um clone deste queryable
+    const newQueryable = this.clone();
+
+    // Analisar os seletores para obter os nomes das propriedades
+    const parentSelectorStr = parentSelector.toString();
+    const subquerySelectorStr = subquerySelector.toString();
+
+    // Obter o nome da coluna da consulta pai
+    const parentPropMatch = parentSelectorStr.match(/=>.*?\.(\w+)/);
+    const parentColumn = parentPropMatch ? parentPropMatch[1] : 'id';
+
+    // Obter o nome da coluna da subconsulta
+    const subPropMatch = subquerySelectorStr.match(/=>.*?\.(\w+)/);
+    const subqueryColumn = subPropMatch ? subPropMatch[1] : 'id';
+
+    // Obter o alias da tabela pai
+    let parentTableAlias = this.alias;
+
+    // Se tivermos um caminho aninhado como "joined.user.id", extrair o objeto raiz
+    const nestedMatch = parentSelectorStr.match(/=>.*?(\w+)\.(\w+)\.(\w+)/);
+    if (nestedMatch) {
+      const objectName = nestedMatch[2]; // Ex: "user" em "joined.user.id"
+
+      // Tentar obter o alias desta tabela
+      if (this.propertyTracker) {
+        const source = this.propertyTracker.getPropertySource(objectName);
+        if (source) {
+          parentTableAlias = source.tableAlias;
+        }
+      }
+    }
+
+    // Construir a consulta base
+    const subquery = subquerySource.query();
+
+    // Criar a condição de correlação
+    const parentColumnExpr = this.expressionBuilder.createColumn(parentColumn, parentTableAlias);
+    const subColumnExpr = subquery.expressionBuilder.createColumn(
+      subqueryColumn,
+      subquerySource.getAlias(),
+    );
+    const equalityExpr = subquery.expressionBuilder.createEqual(subColumnExpr, parentColumnExpr);
+
+    // Adicionar a condição à subconsulta
+    subquery.whereClause = equalityExpr;
+
+    // Aplicar qualquer transformação adicional (como count, etc)
+    // Usar uma variável separada para o resultado da transformação
+    const transformedSubquery = subqueryBuilder(subquery);
+
+    // Criar a expressão de subconsulta com o resultado transformado
+    const subqueryExpr = this.expressionBuilder.createSubquery(transformedSubquery.toMetadata());
+
+    // Criar a expressão de projeção
+    const projectionExpr = this.expressionBuilder.createProjection(subqueryExpr, propertyName);
+
+    // Adicionar à lista de projeções
+    newQueryable.projections.push(projectionExpr);
+
+    return newQueryable as any;
+  }
   /**
    * Adds a SELECT clause to the query
    * @param selector The selector function
