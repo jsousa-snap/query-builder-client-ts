@@ -14,21 +14,18 @@ describe('Group By Queries', () => {
     orders = dbContext.set<Order>('orders');
   });
 
-  // Funcoes nao tratadas
+  test('Group by single column', () => {
+    const query = users
+      .groupBy(u => [u.age])
+      .select(g => ({
+        age: g.age,
+      }));
+    const sql = query.toQueryString();
 
-  //   test('Group by single column', () => {
-  //     const query = users
-  //       .groupBy(u => [u.age])
-  //       .select(g => ({
-  //         age: g.age,
-  //         count: users.count(),
-  //       }));
-  //     const sql = query.toQueryString();
-
-  //     expect(normalizeSQL(sql)).toContain(
-  //       normalizeSQL('SELECT u.age AS age, COUNT(*) AS count FROM users AS u GROUP BY u.age'),
-  //     );
-  //   });
+    expect(normalizeSQL(sql)).toContain(
+      normalizeSQL('SELECT u.age AS age FROM users AS u GROUP BY u.age'),
+    );
+  });
 
   //   test('Group by multiple columns', () => {
   //     const query = users

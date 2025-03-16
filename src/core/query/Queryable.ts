@@ -59,7 +59,11 @@ export class Queryable<T> {
     propertyTracker?: PropertyTracker,
   ) {
     this.expressionBuilder = new ExpressionBuilder();
-    this.lambdaParser = new LambdaParser(this.expressionBuilder, contextVariables);
+    this.lambdaParser = new LambdaParser(
+      this.expressionBuilder,
+      this.expressionBuilder,
+      contextVariables,
+    );
     this.fromTable = this.expressionBuilder.createTable(tableName, alias);
 
     // Inicializar o rastreador de propriedades
@@ -351,6 +355,7 @@ export class Queryable<T> {
     try {
       // Extrair os mapeamentos de propriedades usando o LambdaParser aprimorado
       const lambdaParser = new LambdaParser(
+        this.expressionBuilder,
         this.expressionBuilder,
         this.contextVariables,
         this.propertyTracker,
@@ -1000,22 +1005,18 @@ export class Queryable<T> {
     // Create a new queryable with the new result type
     const newQueryable = this.cloneWithNewType<TResult>();
 
-    // Parse the selector into an expression
-    const selectorExpr = this.lambdaParser.parsePredicate<T>(
-      entity => selector(entity) !== null,
-      this.alias,
-    );
+    // Obter o nome da propriedade diretamente do seletor
+    const selectorStr = selector.toString();
+    const propertyMatch = selectorStr.match(/=>\s*\w+\.(\w+)/);
 
-    // Extract the column expression from the condition
-    let column: Expression | null = null;
-
-    if (selectorExpr instanceof BinaryExpression) {
-      // The left side should be a column expression
-      column = selectorExpr.getLeft();
-    } else {
-      // Use the selector expression itself
-      column = selectorExpr;
+    if (!propertyMatch || !propertyMatch[1]) {
+      throw new Error(`Could not extract property from min selector: ${selectorStr}`);
     }
+
+    const propertyName = propertyMatch[1];
+
+    // Criar expressão de coluna
+    const column = this.expressionBuilder.createColumn(propertyName, this.alias);
 
     // Create the MIN function
     const minFunc = this.expressionBuilder.createMin(column);
@@ -1034,22 +1035,8 @@ export class Queryable<T> {
     // Create a new queryable with the new result type
     const newQueryable = this.cloneWithNewType<TResult>();
 
-    // Parse the selector into an expression
-    const selectorExpr = this.lambdaParser.parsePredicate<T>(
-      entity => selector(entity) !== null,
-      this.alias,
-    );
-
-    // Extract the column expression from the condition
-    let column: Expression | null = null;
-
-    if (selectorExpr instanceof BinaryExpression) {
-      // The left side should be a column expression
-      column = selectorExpr.getLeft();
-    } else {
-      // Use the selector expression itself
-      column = selectorExpr;
-    }
+    // Parse the selector to get the correct column expression
+    const column = this.lambdaParser.parseAggregationSelector(selector, this.alias);
 
     // Create the SUM function
     const sumFunc = this.expressionBuilder.createSum(column);
@@ -1068,22 +1055,8 @@ export class Queryable<T> {
     // Create a new queryable with the new result type
     const newQueryable = this.cloneWithNewType<TResult>();
 
-    // Parse the selector into an expression
-    const selectorExpr = this.lambdaParser.parsePredicate<T>(
-      entity => selector(entity) !== null,
-      this.alias,
-    );
-
-    // Extract the column expression from the condition
-    let column: Expression | null = null;
-
-    if (selectorExpr instanceof BinaryExpression) {
-      // The left side should be a column expression
-      column = selectorExpr.getLeft();
-    } else {
-      // Use the selector expression itself
-      column = selectorExpr;
-    }
+    // Parse the selector to get the correct column expression
+    const column = this.lambdaParser.parseAggregationSelector(selector, this.alias);
 
     // Create the AVG function
     const avgFunc = this.expressionBuilder.createAvg(column);

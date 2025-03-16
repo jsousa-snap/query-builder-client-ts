@@ -65,11 +65,12 @@ describe('Order By Queries', () => {
 
   test('Order by with selection', () => {
     const query = users
+      .orderBy(u => u.name)
       .select(u => ({
         userId: u.id,
         userName: u.name,
-      }))
-      .orderBy(u => u.userName);
+      }));
+
     const sql = query.toQueryString();
 
     expect(normalizeSQL(sql)).toContain(

@@ -4,6 +4,7 @@ import { Expression, ExpressionType } from '../expressions/Expression';
 import { ExpressionBuilder } from './ExpressionBuilder';
 import { PropertyTracker } from './PropertyTracker';
 import { ColumnExpression } from '../expressions/ColumnExpression';
+import { AggregateSelector } from './Types';
 
 /**
  * Interface que representa um resultado de mapeamento de propriedade
@@ -27,6 +28,7 @@ export interface PropertyMapping {
  * Analisa expressões lambda TypeScript em árvores de expressões
  */
 export class LambdaParser {
+  private readonly expressionBuilder: ExpressionBuilder;
   private readonly builder: ExpressionBuilder;
   private readonly variables: Record<string, any>;
   private parameterName: string = '';
@@ -39,13 +41,42 @@ export class LambdaParser {
    * @param propertyTracker Opcional - rastreador de propriedades para referência
    */
   constructor(
+    expressionBuilder: ExpressionBuilder,
     builder: ExpressionBuilder,
     variables: Record<string, any> = {},
     propertyTracker?: PropertyTracker,
   ) {
+    this.expressionBuilder = expressionBuilder;
     this.builder = builder;
     this.variables = variables;
     this.propertyTracker = propertyTracker;
+  }
+
+  parseAggregationSelector<T>(selector: AggregateSelector<T>, tableAlias: string): Expression {
+    const selectorStr = selector.toString();
+
+    // Expressão regular para extrair o nome da propriedade
+    const propertyMatch = selectorStr.match(/=>\s*\w+\.(\w+)/);
+
+    if (propertyMatch && propertyMatch[1]) {
+      const propertyName = propertyMatch[1];
+
+      // Verificar se temos informações de origem da propriedade no rastreador
+      if (this.propertyTracker) {
+        const propertySource = this.propertyTracker.getPropertySource(propertyName);
+
+        if (propertySource) {
+          // Usar o alias da tabela do rastreador
+          return this.expressionBuilder.createColumn(propertyName, propertySource.tableAlias);
+        }
+      }
+
+      // Fallback para o alias padrão
+      return this.expressionBuilder.createColumn(propertyName, tableAlias);
+    }
+
+    // Se não conseguir extrair a propriedade, lançar erro
+    throw new Error(`Could not extract property from aggregation selector: ${selectorStr}`);
   }
 
   /**
