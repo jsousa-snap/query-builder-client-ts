@@ -191,6 +191,14 @@ export class Queryable<T> {
    * @param subquerySelector Seletor para a coluna da subconsulta
    * @param subqueryBuilder Função que modifica a subconsulta
    */
+  /**
+   * Adiciona uma subconsulta à seleção
+   * @param propertyName Nome da propriedade para o resultado da subconsulta
+   * @param subquerySource DbSet fonte para a subconsulta
+   * @param parentSelector Seletor para a coluna da consulta pai
+   * @param subquerySelector Seletor para a coluna da subconsulta
+   * @param subqueryBuilder Função que modifica a subconsulta
+   */
   withSubquery<U, TResult>(
     propertyName: string,
     subquerySource: DbSet<U>,
@@ -201,31 +209,105 @@ export class Queryable<T> {
     // Criar um clone deste queryable
     const newQueryable = this.clone();
 
-    // Analisar os seletores para obter os nomes das propriedades
-    const parentSelectorStr = parentSelector.toString();
+    // Analisar o seletor para a coluna da subconsulta
     const subquerySelectorStr = subquerySelector.toString();
-
-    // Obter o nome da coluna da consulta pai
-    const parentPropMatch = parentSelectorStr.match(/=>.*?\.(\w+)/);
-    const parentColumn = parentPropMatch ? parentPropMatch[1] : 'id';
-
-    // Obter o nome da coluna da subconsulta
     const subPropMatch = subquerySelectorStr.match(/=>.*?\.(\w+)/);
     const subqueryColumn = subPropMatch ? subPropMatch[1] : 'id';
 
-    // Obter o alias da tabela pai
+    // Analisar o seletor pai para obter o nome da propriedade
+    const parentSelectorStr = parentSelector.toString();
+
+    // Definir valores padrão
     let parentTableAlias = this.alias;
+    let parentColumn = 'id';
 
-    // Se tivermos um caminho aninhado como "joined.user.id", extrair o objeto raiz
-    const nestedMatch = parentSelectorStr.match(/=>.*?(\w+)\.(\w+)\.(\w+)/);
-    if (nestedMatch) {
-      const objectName = nestedMatch[2]; // Ex: "user" em "joined.user.id"
+    // Verificar se estamos após um select()
+    const afterSelect = this.projections.length > 0;
 
-      // Tentar obter o alias desta tabela
-      if (this.propertyTracker) {
-        const source = this.propertyTracker.getPropertySource(objectName);
-        if (source) {
-          parentTableAlias = source.tableAlias;
+    // Extrair o nome da propriedade pai
+    const propMatch = parentSelectorStr.match(/=>.*?(?:\w+\.)?(\w+)/);
+    if (propMatch && propMatch[1]) {
+      const propName = propMatch[1];
+
+      if (afterSelect) {
+        // Procurar a propriedade na lista de projeções
+        for (const projection of this.projections) {
+          if (projection.getAlias() === propName) {
+            // Encontramos a projeção - verificar se é uma expressão de coluna
+            const expr = projection.getExpression();
+
+            // Para expressões de coluna, extraímos o alias e nome da coluna
+            if (expr.accept) {
+              try {
+                // Tentar verificar se é uma ColumnExpression
+                if (expr instanceof ColumnExpression) {
+                  parentTableAlias = expr.getTableAlias();
+                  parentColumn = expr.getColumnName();
+                  break;
+                }
+              } catch {
+                // Se não conseguir verificar diretamente, tentamos um método mais genérico
+                const str = String(expr);
+                if (str.includes('Column')) {
+                  // Tentar extrair com regex
+                  const tableMatch = str.match(/tableAlias:\s*['"]([^'"]+)['"]/);
+                  const colMatch = str.match(/columnName:\s*['"]([^'"]+)['"]/);
+
+                  if (tableMatch && colMatch) {
+                    parentTableAlias = tableMatch[1];
+                    parentColumn = colMatch[1];
+                    break;
+                  }
+                }
+              }
+            }
+          }
+        }
+      } else {
+        // Antes de select, verificar se é uma propriedade aninhada
+        const nestedMatch = parentSelectorStr.match(/=>.*?(\w+)\.(\w+)\.(\w+)/);
+        if (nestedMatch) {
+          // Caso: joined.post.id
+          const objectName = nestedMatch[2]; // Ex: "post"
+          parentColumn = nestedMatch[3]; // Ex: "id"
+
+          // Procurar nos joins
+          for (const join of this.joins) {
+            const targetTable = join.getTargetTable();
+            const targetName = targetTable.getTableName();
+            const targetAlias = targetTable.getAlias();
+
+            if (
+              targetName.toLowerCase().includes(objectName.toLowerCase()) ||
+              targetAlias === objectName.toLowerCase().charAt(0)
+            ) {
+              parentTableAlias = targetAlias;
+              break;
+            }
+          }
+        } else {
+          // Caso simple: entity.id
+          const simpleMatch = parentSelectorStr.match(/=>.*?(?:(\w+)\.)?(\w+)/);
+          if (simpleMatch && simpleMatch[1] && simpleMatch[2]) {
+            // Caso: object.property
+            const objectName = simpleMatch[1];
+            parentColumn = simpleMatch[2];
+
+            // Procurar nos joins
+            for (const join of this.joins) {
+              const targetTable = join.getTargetTable();
+              const targetName = targetTable.getTableName();
+              const targetAlias = targetTable.getAlias();
+
+              if (
+                targetName.toLowerCase().includes(objectName.toLowerCase()) ||
+                targetAlias === objectName.toLowerCase().charAt(0)
+              ) {
+                parentTableAlias = targetAlias;
+                break;
+              }
+            }
+          }
         }
       }
     }
@@ -245,10 +327,9 @@ export class Queryable<T> {
     subquery.whereClause = equalityExpr;
 
     // Aplicar qualquer transformação adicional (como count, etc)
-    // Usar uma variável separada para o resultado da transformação
     const transformedSubquery = subqueryBuilder(subquery);
 
-    // Criar a expressão de subconsulta com o resultado transformado
+    // Criar a expressão de subconsulta
     const subqueryExpr = this.expressionBuilder.createSubquery(transformedSubquery.toMetadata());
 
     // Criar a expressão de projeção

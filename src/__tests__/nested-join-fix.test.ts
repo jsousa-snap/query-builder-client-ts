@@ -78,7 +78,8 @@ describe('Rastreamento de Propriedades Aninhadas', () => {
     console.log('SQL gerado:');
     console.log(usersWithPostCount.toQueryString());
   });
-  test('subquery', () => {
+
+  test('subquery before select', () => {
     const db = new DbContext();
     const users = db.set('users');
     const posts = db.set('posts');
@@ -101,7 +102,38 @@ describe('Rastreamento de Propriedades Aninhadas', () => {
       .select(joined => ({
         userName: joined.user.name,
         postTitle: joined.post.title,
+        postId: joined.post.id,
       }));
+
+    const sql = query.toQueryString();
+    console.log(sql);
+  });
+
+  test('subquery after select', () => {
+    const db = new DbContext();
+    const users = db.set('users');
+    const posts = db.set('posts');
+    const comments = db.set('comments');
+
+    const query = users
+      .join(
+        posts,
+        user => user.id,
+        post => post.userId,
+        (user, post) => ({ user, post }),
+      )
+      .select(joined => ({
+        userName: joined.user.name,
+        postTitle: joined.post.title,
+        postId: joined.post.id,
+      }))
+      .withSubquery(
+        'commentCount',
+        comments,
+        joined => joined.postId,
+        comment => comment.postId,
+        query => query.count(),
+      );
 
     const sql = query.toQueryString();
     console.log(sql);
