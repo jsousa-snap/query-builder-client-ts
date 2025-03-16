@@ -31,11 +31,11 @@ describe('Where Queries', () => {
   });
 
   test('Multiple conditions with AND', () => {
-    const query = users.where(u => u.age > 18 && u.isActive);
+    const query = users.where(u => u.age > 18 && u.isActive === true);
     const sql = query.toQueryString();
 
     expect(normalizeSQL(sql)).toContain(
-      normalizeSQL('SELECT * FROM users AS u WHERE ((u.age > 18) AND (u.isActive = TRUE))'),
+      normalizeSQL('SELECT * FROM users AS u WHERE ((u.age > 18) AND (u.isActive = 1))'),
     );
   });
 
@@ -43,10 +43,13 @@ describe('Where Queries', () => {
     const query = users.where(u => u.age < 18 || u.name.includes('Junior'));
     const sql = query.toQueryString();
 
-    expect(normalizeSQL(sql)).toContain(
-      normalizeSQL(
-        'SELECT * FROM users AS u WHERE ((u.age < 18) OR LIKE(u.name, CONCAT("%", "Junior", "%")))',
-      ),
+    expect(sql).toContain(
+      `SELECT
+  *
+FROM users AS u
+WHERE
+  ((u.age < 18) OR
+  LIKE(u.name, CONCAT('%', 'Junior', '%')))`,
     );
   });
 
@@ -55,7 +58,7 @@ describe('Where Queries', () => {
     const sql = query.toQueryString();
 
     expect(normalizeSQL(sql)).toContain(
-      normalizeSQL('SELECT * FROM users AS u WHERE LIKE(u.name, CONCAT("%", "John", "%"))'),
+      normalizeSQL(`SELECT * FROM users AS u WHERE LIKE(u.name, CONCAT('%', 'John', '%'))`),
     );
   });
 

@@ -11,7 +11,7 @@ import {
 } from './Types';
 
 import { JoinType, JoinExpression } from '../expressions/JoinExpression';
-import { OrderByExpression, SelectExpression } from '../expressions/SelectExpression';
+import { OrderingExpression, SelectExpression } from '../expressions/SelectExpression';
 import { ExpressionBuilder } from './ExpressionBuilder';
 import { LambdaParser } from './LambdaParser';
 import { SqlGenerationVisitor } from '../visitors/SqlGenerationVisitor';
@@ -38,7 +38,7 @@ export class Queryable<T> {
   private joins: JoinExpression[] = [];
   private groupByColumns: Expression[] = [];
   private havingClause: Expression | null = null;
-  private orderByColumns: OrderByExpression[] = [];
+  private orderByColumns: OrderingExpression[] = [];
   private limitValue: Expression | null = null;
   private offsetValue: Expression | null = null;
   private isDistinct: boolean = false;

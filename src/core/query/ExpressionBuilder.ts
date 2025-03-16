@@ -4,7 +4,7 @@ import { UnaryExpression } from '../expressions/UnaryExpression';
 import { ColumnExpression } from '../expressions/ColumnExpression';
 import { ConstantExpression } from '../expressions/ConstantExpression';
 import { FunctionExpression } from '../expressions/FunctionExpression';
-import { SelectExpression, OrderByExpression } from '../expressions/SelectExpression';
+import { SelectExpression, OrderingExpression } from '../expressions/SelectExpression';
 import { TableExpression } from '../expressions/TableExpression';
 import { JoinExpression, JoinType } from '../expressions/JoinExpression';
 import { ScalarSubqueryExpression } from '../expressions/ScalarSubqueryExpression';
@@ -103,8 +103,8 @@ export class ExpressionBuilder {
   /**
    * Creates an ORDER BY expression
    */
-  createOrderBy(column: Expression, ascending: boolean): OrderByExpression {
-    return new OrderByExpression(column, ascending);
+  createOrderBy(column: Expression, ascending: boolean): OrderingExpression {
+    return new OrderingExpression(column, ascending);
   }
 
   /**
@@ -117,7 +117,7 @@ export class ExpressionBuilder {
     whereClause: Expression | null = null,
     groupByColumns: Expression[] = [],
     havingClause: Expression | null = null,
-    orderByColumns: OrderByExpression[] = [],
+    orderByColumns: OrderingExpression[] = [],
     limitValue: Expression | null = null,
     offsetValue: Expression | null = null,
     isDistinct: boolean = false,

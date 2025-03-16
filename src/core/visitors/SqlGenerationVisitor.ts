@@ -7,7 +7,7 @@ import { JoinExpression, JoinType } from '../expressions/JoinExpression';
 import { ParameterExpression } from '../expressions/ParameterExpression';
 import { ParentColumnExpression } from '../expressions/ParentColumnExpression';
 import { ProjectionExpression } from '../expressions/ProjectionExpression';
-import { OrderByExpression, SelectExpression } from '../expressions/SelectExpression';
+import { SelectExpression } from '../expressions/SelectExpression';
 import { ScalarSubqueryExpression } from '../expressions/ScalarSubqueryExpression';
 import { TableExpression } from '../expressions/TableExpression';
 import { UnaryExpression } from '../expressions/UnaryExpression';
@@ -164,15 +164,15 @@ export class SqlGenerationVisitor implements IExpressionVisitor<string> {
         .join(', ')}`;
     }
 
-    // Add LIMIT and OFFSET
+    // Add LIMIT
     const limitValue = expr.getLimitValue();
     if (limitValue) {
       sql += ` LIMIT ${limitValue.accept(this)}`;
-
-      const offsetValue = expr.getOffsetValue();
-      if (offsetValue) {
-        sql += ` OFFSET ${offsetValue.accept(this)}`;
-      }
+    }
+    // Add OFFSET
+    const offsetValue = expr.getOffsetValue();
+    if (offsetValue) {
+      sql += ` OFFSET ${offsetValue.accept(this)}`;
     }
 
     return sql;

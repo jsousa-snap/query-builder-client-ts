@@ -112,7 +112,7 @@ export interface ISelectExpression extends Expression {
   getWhereClause(): Expression | null;
   getGroupByColumns(): Expression[];
   getHavingClause(): Expression | null;
-  getOrderByColumns(): IOrderByExpression[];
+  getOrderByColumns(): IOrderingExpression[];
   getLimitValue(): Expression | null;
   getOffsetValue(): Expression | null;
   getIsDistinct(): boolean;
@@ -144,7 +144,7 @@ export interface IParameterExpression extends Expression {
 }
 
 // Para compatibilidade com SelectExpression
-export interface IOrderByExpression {
+export interface IOrderingExpression {
   getColumn(): Expression;
   isAscending(): boolean;
 }

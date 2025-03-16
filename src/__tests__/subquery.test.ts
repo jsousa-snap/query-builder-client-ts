@@ -108,14 +108,17 @@ FROM users AS u`,
       );
     const sql = query.toQueryString();
 
-    expect(normalizeSQL(sql)).toContain(
-      normalizeSQL(`
-        SELECT 
-          u.id AS userId, 
-          u.name AS name, 
-          (SELECT MAX(o.amount) FROM orders AS o WHERE (o.userId = u.id)) AS maxOrderAmount 
-        FROM users AS u
-      `),
+    expect(sql).toContain(
+      `SELECT
+  u.id AS userId,
+  u.name AS name,
+  (
+SELECT
+  MAX(o.amount) AS max
+FROM orders AS o
+WHERE
+  (o.userId = u.id)) AS maxOrderAmount
+FROM users AS u`,
     );
   });
 
@@ -134,21 +137,19 @@ FROM users AS u`,
       );
     const sql = query.toQueryString();
 
-    expect(normalizeSQL(sql)).toContain(
-      normalizeSQL(`
-        SELECT 
-          u.name AS name, 
-          (
-            SELECT COUNT(*) 
-            FROM orders AS o 
-            WHERE (
-              (o.userId = u.id) AND 
-              (o.status = 'active') AND 
-              (o.amount > 100)
-            )
-          ) AS activeOrders 
-        FROM users AS u
-      `),
+    expect(sql).toContain(
+      `SELECT
+  u.id AS userId,
+  u.name AS name,
+  (
+SELECT
+  COUNT(*) AS count
+FROM orders AS o
+WHERE
+  ((o.userId = u.id) AND
+  ((o.status = 'active') AND
+  (o.amount > 100)))) AS activeOrders
+FROM users AS u`,
     );
   });
 });

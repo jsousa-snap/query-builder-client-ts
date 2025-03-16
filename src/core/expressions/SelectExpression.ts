@@ -14,7 +14,7 @@ export class SelectExpression extends Expression {
     private readonly whereClause: Expression | null,
     private readonly groupByColumns: Expression[],
     private readonly havingClause: Expression | null,
-    private readonly orderByColumns: OrderByExpression[],
+    private readonly orderByColumns: OrderingExpression[],
     private readonly limitValue: Expression | null,
     private readonly offsetValue: Expression | null,
     private readonly isDistinct: boolean,
@@ -67,7 +67,7 @@ export class SelectExpression extends Expression {
   /**
    * Gets the ORDER BY expressions
    */
-  getOrderByColumns(): OrderByExpression[] {
+  getOrderByColumns(): OrderingExpression[] {
     return this.orderByColumns;
   }
 
@@ -103,7 +103,7 @@ export class SelectExpression extends Expression {
 /**
  * Represents an ORDER BY expression with column and direction
  */
-export class OrderByExpression {
+export class OrderingExpression {
   constructor(
     private readonly column: Expression,
     private readonly ascending: boolean,

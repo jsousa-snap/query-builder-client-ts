@@ -3,7 +3,7 @@ import { UnaryExpression } from '../core/expressions/UnaryExpression';
 import { ColumnExpression } from '../core/expressions/ColumnExpression';
 import { ConstantExpression } from '../core/expressions/ConstantExpression';
 import { FunctionExpression } from '../core/expressions/FunctionExpression';
-import { SelectExpression, OrderByExpression } from '../core/expressions/SelectExpression';
+import { SelectExpression, OrderingExpression } from '../core/expressions/SelectExpression';
 import { TableExpression } from '../core/expressions/TableExpression';
 import { JoinExpression } from '../core/expressions/JoinExpression';
 import { ScalarSubqueryExpression } from '../core/expressions/ScalarSubqueryExpression';
@@ -77,7 +77,7 @@ export class ExpressionSerializer {
       return this.serializeParameterExpression(expr);
     }
 
-    if (expr instanceof OrderByExpression) {
+    if (expr instanceof OrderingExpression) {
       return this.serializeOrderByExpression(expr);
     }
 
@@ -217,7 +217,7 @@ export class ExpressionSerializer {
   /**
    * Serializa uma expressão de ordenação
    */
-  private static serializeOrderByExpression(expr: OrderByExpression): ExpressionJson {
+  private static serializeOrderByExpression(expr: OrderingExpression): ExpressionJson {
     return {
       type: 'OrderByExpression',
       column: this.serialize(expr.getColumn()),

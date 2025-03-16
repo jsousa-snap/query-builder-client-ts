@@ -1,3 +1,4 @@
+import { ExpressionSerializer } from '../utils/ExpressionSerializer';
 import { DbContext } from '../core/context/DbContext';
 import { normalizeSQL } from './common/test-utils';
 import { User, Order } from './common/models';
@@ -24,6 +25,8 @@ describe('Pagination Queries', () => {
   test('Offset results', () => {
     const query = users.offset(20);
     const sql = query.toQueryString();
+
+    const metadata = ExpressionSerializer.serialize(query.toMetadata());
 
     expect(normalizeSQL(sql)).toContain(normalizeSQL('SELECT * FROM users AS u OFFSET 20'));
   });
