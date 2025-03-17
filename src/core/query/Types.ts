@@ -2,8 +2,14 @@
  * Defines common types used in query building
  */
 
+import { ExpressionJson } from '../../utils/ExpressionSerializer';
 import { Expression } from '../expressions/Expression';
 import { Queryable } from './Queryable';
+
+export interface IDatabaseProvider {
+  queryAsync(metadata: ExpressionJson): Promise<Record<string, any>[]>;
+  firstAsync(metadata: ExpressionJson): Promise<Record<string, any> | null>;
+}
 
 /**
  * Represents the direction of an ORDER BY clause

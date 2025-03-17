@@ -1,7 +1,7 @@
 // src/core/context/DbSet.ts
 import { Queryable } from '../query/Queryable';
 import { JoinType } from '../expressions/JoinExpression';
-import { OrderDirection } from '../query/Types';
+import { IDatabaseProvider, OrderDirection } from '../query/Types';
 
 /**
  * Represents a database table or view
@@ -14,6 +14,7 @@ export class DbSet<T> {
    * @param alias The unique alias for the table
    */
   constructor(
+    private readonly provider: IDatabaseProvider,
     private readonly tableName: string,
     private readonly alias: string,
   ) {}
@@ -37,7 +38,7 @@ export class DbSet<T> {
    * @param variables Optional context variables for the query
    */
   query(variables: Record<string, any> = {}): Queryable<T> {
-    return new Queryable<T>(this.tableName, this.alias, variables);
+    return new Queryable<T>(this.provider, this.tableName, this.alias, variables);
   }
 
   /**

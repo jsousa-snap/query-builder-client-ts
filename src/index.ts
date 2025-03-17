@@ -11,7 +11,7 @@ export { DbSet } from './core/context/DbSet';
 export { Queryable } from './core/query/Queryable';
 
 // Enums
-export { OrderDirection } from './core/query/Types';
+export { OrderDirection, IDatabaseProvider } from './core/query/Types';
 export { JoinType } from './core/expressions/JoinExpression';
 export { ExpressionType } from './core/expressions/Expression';
 

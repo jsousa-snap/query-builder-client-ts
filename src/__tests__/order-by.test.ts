@@ -1,8 +1,13 @@
 import { DbContext } from '../core/context/DbContext';
 import { normalizeSQL } from './common/test-utils';
 import { User, Order } from './common/models';
-import { OrderDirection } from '../core/query/Types';
+import { IDatabaseProvider, OrderDirection } from '../core/query/Types';
 import { DbSet } from '../core/context/DbSet';
+
+const mockDatabaseProvider: IDatabaseProvider = {
+  queryAsync: jest.fn().mockResolvedValue([{ id: 1, name: 'Alice' }]),
+  firstAsync: jest.fn().mockResolvedValue({ id: 1, name: 'Alice' }),
+};
 
 describe('Order By Queries', () => {
   let dbContext: DbContext;
@@ -10,7 +15,7 @@ describe('Order By Queries', () => {
   let orders: DbSet<Order>;
 
   beforeEach(() => {
-    dbContext = new DbContext();
+    dbContext = new DbContext(mockDatabaseProvider);
     users = dbContext.set<User>('users');
     orders = dbContext.set<Order>('orders');
   });

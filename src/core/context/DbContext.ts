@@ -1,4 +1,4 @@
-// src/core/context/DbContext.ts
+import { IDatabaseProvider } from '../query/Types';
 import { DbSet } from './DbSet';
 
 /**
@@ -12,7 +12,7 @@ export class DbContext {
   /**
    * Creates a new database context
    */
-  constructor() {
+  constructor(private readonly provider: IDatabaseProvider) {
     // Could accept connection parameters in a real implementation
   }
 
@@ -63,7 +63,7 @@ export class DbContext {
     }
 
     // Create a new DbSet with the alias
-    const dbSet = new DbSet<T>(tableName, alias);
+    const dbSet = new DbSet<T>(this.provider, tableName, alias);
     this.dbSets.set(setId, dbSet);
     return dbSet;
   }

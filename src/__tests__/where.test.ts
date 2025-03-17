@@ -2,13 +2,19 @@ import { DbContext } from '../core/context/DbContext';
 import { normalizeSQL } from './common/test-utils';
 import { User } from './common/models';
 import { DbSet } from '../core/context/DbSet';
+import { IDatabaseProvider } from '../core/query/Types';
+
+const mockDatabaseProvider: IDatabaseProvider = {
+  queryAsync: jest.fn().mockResolvedValue([{ id: 1, name: 'Alice' }]),
+  firstAsync: jest.fn().mockResolvedValue({ id: 1, name: 'Alice' }),
+};
 
 describe('Where Queries', () => {
   let dbContext: DbContext;
   let users: DbSet<User>;
 
   beforeEach(() => {
-    dbContext = new DbContext();
+    dbContext = new DbContext(mockDatabaseProvider);
     users = dbContext.set<User>('users');
   });
 

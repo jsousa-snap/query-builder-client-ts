@@ -8,6 +8,7 @@ import {
   JoinResultSelector,
   AggregateSelector,
   OrderDirection,
+  IDatabaseProvider,
 } from './Types';
 
 import { JoinType, JoinExpression } from '../expressions/JoinExpression';
@@ -23,6 +24,7 @@ import { BinaryExpression } from '../expressions/BinaryExpression';
 import { formatSQLClientStyle } from '../../utils/SqlFormatter';
 import { PropertyTracker } from './PropertyTracker';
 import { ScalarSubqueryExpression } from '../expressions/ScalarSubqueryExpression';
+import { ExpressionSerializer } from '../../utils/ExpressionSerializer';
 
 /**
  * Represents a query that can be built and executed against a data source
@@ -53,6 +55,7 @@ export class Queryable<T> {
    * @param variables Context variables for the query
    */
   constructor(
+    private readonly provider: IDatabaseProvider,
     private readonly tableName: string,
     private readonly alias: string,
     private readonly contextVariables: Record<string, any> = {},
@@ -85,6 +88,7 @@ export class Queryable<T> {
   withVariables(variables: Record<string, any>): Queryable<T> {
     // Create a new queryable with merged variables
     const newQueryable = new Queryable<T>(
+      this.provider,
       this.tableName,
       this.alias,
       {
@@ -1101,6 +1105,7 @@ export class Queryable<T> {
   private clone(): Queryable<T> {
     // Criar um novo queryable
     const newQueryable = new Queryable<T>(
+      this.provider,
       this.tableName,
       this.alias,
       this.contextVariables,
@@ -1128,6 +1133,7 @@ export class Queryable<T> {
   private cloneWithNewType<TResult>(): Queryable<TResult> {
     // Criar um novo queryable
     const newQueryable = new Queryable<TResult>(
+      this.provider,
       this.tableName,
       this.alias,
       this.contextVariables,
@@ -1436,5 +1442,15 @@ export class Queryable<T> {
       this.offsetValue,
       this.isDistinct,
     );
+  }
+
+  async toListAsync(): Promise<Record<string, any>[]> {
+    const metadata = ExpressionSerializer.serialize(this.toMetadata());
+    return await this.provider.queryAsync(metadata);
+  }
+
+  async firstAsync(): Promise<Record<string, any> | null> {
+    const metadata = ExpressionSerializer.serialize(this.toMetadata());
+    return await this.provider.firstAsync(metadata);
   }
 }

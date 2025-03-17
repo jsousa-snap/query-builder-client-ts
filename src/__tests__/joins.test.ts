@@ -3,6 +3,12 @@ import { normalizeSQL } from './common/test-utils';
 import { User, Order, Product } from './common/models';
 import { JoinType } from '../core/expressions/JoinExpression';
 import { DbSet } from '../core/context/DbSet';
+import { IDatabaseProvider } from '../core/query/Types';
+
+const mockDatabaseProvider: IDatabaseProvider = {
+  queryAsync: jest.fn().mockResolvedValue([{ id: 1, name: 'Alice' }]),
+  firstAsync: jest.fn().mockResolvedValue({ id: 1, name: 'Alice' }),
+};
 
 describe('Join Queries', () => {
   let dbContext: DbContext;
@@ -11,7 +17,7 @@ describe('Join Queries', () => {
   let products: DbSet<Product>;
 
   beforeEach(() => {
-    dbContext = new DbContext();
+    dbContext = new DbContext(mockDatabaseProvider);
     users = dbContext.set<User>('users');
     orders = dbContext.set<Order>('orders');
     products = dbContext.set<Product>('products');
