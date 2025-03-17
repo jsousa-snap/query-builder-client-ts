@@ -48,30 +48,65 @@ export class LambdaParser {
     this.propertyTracker = propertyTracker;
   }
 
-  parseAggregationSelector<T>(selector: AggregateSelector<T>, tableAlias: string): Expression {
+  parseAggregationSelector<T>(selector: (entity: T) => any, defaultTableAlias: string): Expression {
+    // Extract the function string
     const selectorStr = selector.toString();
+    this.extractParameterName(selectorStr);
 
-    // Expressão regular para extrair o nome da propriedade
-    const propertyMatch = selectorStr.match(/=>\s*\w+\.(\w+)/);
+    // Check if we have a nested property (like joined.order.amount)
+    const nestedPropertyMatch = selectorStr.match(/=>\s*\w+\.(\w+)\.(\w+)/);
 
-    if (propertyMatch && propertyMatch[1]) {
-      const propertyName = propertyMatch[1];
+    if (nestedPropertyMatch && nestedPropertyMatch[1] && nestedPropertyMatch[2]) {
+      const objectName = nestedPropertyMatch[1]; // e.g., "order"
+      const propertyName = nestedPropertyMatch[2]; // e.g., "amount"
 
-      // Verificar se temos informações de origem da propriedade no rastreador
+      // Try to resolve the correct table alias for this nested property
       if (this.propertyTracker) {
-        const propertySource = this.propertyTracker.getPropertySource(propertyName);
+        // Strategy 1: Direct object registration
+        const objectSource = this.propertyTracker.getPropertySource(objectName);
+        if (objectSource) {
+          return this.builder.createColumn(propertyName, objectSource.tableAlias);
+        }
 
-        if (propertySource) {
-          // Usar o alias da tabela do rastreador
-          return this.builder.createColumn(propertyName, propertySource.tableAlias);
+        // Strategy 2: Wildcard registration
+        const wildcardKey = `${objectName}.*`;
+        const wildcardSource = this.propertyTracker.getPropertySource(wildcardKey);
+        if (wildcardSource) {
+          return this.builder.createColumn(propertyName, wildcardSource.tableAlias);
+        }
+
+        // Strategy 3: Search all property sources
+        for (const [propName, source] of this.propertyTracker.getAllPropertySources().entries()) {
+          if (
+            propName === objectName ||
+            (source.propertyPath && source.propertyPath.includes(objectName))
+          ) {
+            return this.builder.createColumn(propertyName, source.tableAlias);
+          }
+        }
+
+        // Strategy 4: Table alias matching
+        for (const alias of this.propertyTracker.getTableAliases()) {
+          // Exact match or first letter match
+          if (
+            alias === objectName ||
+            alias.toLowerCase() === objectName.toLowerCase() ||
+            alias.charAt(0).toLowerCase() === objectName.charAt(0).toLowerCase()
+          ) {
+            return this.builder.createColumn(propertyName, alias);
+          }
         }
       }
-
-      // Fallback para o alias padrão
-      return this.builder.createColumn(propertyName, tableAlias);
     }
 
-    // Se não conseguir extrair a propriedade, lançar erro
+    // For simple property access (entity.property)
+    const simplePropertyMatch = selectorStr.match(/=>\s*\w+\.(\w+)/);
+    if (simplePropertyMatch && simplePropertyMatch[1]) {
+      const propertyName = simplePropertyMatch[1];
+      return this.builder.createColumn(propertyName, defaultTableAlias);
+    }
+
+    // Fallback: couldn't determine the property
     throw new Error(`Could not extract property from aggregation selector: ${selectorStr}`);
   }
 

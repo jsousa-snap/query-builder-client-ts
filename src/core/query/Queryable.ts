@@ -17,7 +17,7 @@ import { ExpressionBuilder } from './ExpressionBuilder';
 import { LambdaParser } from './LambdaParser';
 import { SqlGenerationVisitor } from '../visitors/SqlGenerationVisitor';
 import { TableExpression } from '../expressions/TableExpression';
-import { Expression } from '../expressions/Expression';
+import { Expression, ExpressionType } from '../expressions/Expression';
 import { ProjectionExpression } from '../expressions/ProjectionExpression';
 import { ColumnExpression } from '../expressions/ColumnExpression';
 import { BinaryExpression } from '../expressions/BinaryExpression';
@@ -25,6 +25,7 @@ import { formatSQLClientStyle } from '../../utils/SqlFormatter';
 import { PropertyTracker } from './PropertyTracker';
 import { ScalarSubqueryExpression } from '../expressions/ScalarSubqueryExpression';
 import { ExpressionSerializer } from '../../utils/ExpressionSerializer';
+import { FunctionExpression } from '../expressions/FunctionExpression';
 
 /**
  * Represents a query that can be built and executed against a data source
@@ -781,25 +782,23 @@ export class Queryable<T> {
     // Criar um novo queryable
     const newQueryable = this.clone();
 
-    // Obter a string da função seletora para análise
-    const selectorStr = selector.toString();
-
-    // Usar o método genérico para resolver a propriedade, incluindo aninhamentos
-    const propertyInfo = this.resolvePropertyPath(selectorStr, this.alias);
-
-    // Criar uma expressão de coluna com o alias correto
-    const column = this.expressionBuilder.createColumn(
-      propertyInfo.columnName,
-      propertyInfo.tableAlias,
+    // Use the enhanced LambdaParser to correctly handle nested properties
+    const enhancedParser = new LambdaParser(
+      this.expressionBuilder,
+      this.contextVariables,
+      this.propertyTracker,
     );
 
-    // Criar a expressão ORDER BY
+    // Parse the selector with nested property support
+    const column = enhancedParser.parseAggregationSelector<T>(selector, this.alias);
+
+    // Create the ORDER BY expression
     const orderByExpr = this.expressionBuilder.createOrderBy(
       column,
       direction === OrderDirection.ASC,
     );
 
-    // Adicionar o ORDER BY à consulta
+    // Add the ORDER BY to the query
     newQueryable.orderByColumns.push(orderByExpr);
 
     return newQueryable;
@@ -813,41 +812,70 @@ export class Queryable<T> {
     // Criar um novo queryable
     const newQueryable = this.clone();
 
-    // Para groupBy podemos receber um array de colunas
-    const fnStr = selector.toString();
+    // Get the selector function string
+    const selectorStr = selector.toString();
 
-    // Tentar extrair propriedades do literal de array
-    const propertiesMatch = fnStr.match(/\[\s*\w+\.(\w+)(?:\s*,\s*\w+\.(\w+))*\s*\]/);
+    // Try to detect if it's returning an array
+    const isArraySelector = selectorStr.includes('[') && selectorStr.includes(']');
 
-    if (propertiesMatch) {
-      // Processar todos os grupos capturados que podem conter nomes de propriedades
-      for (let i = 1; i < propertiesMatch.length; i++) {
-        if (propertiesMatch[i]) {
-          const propName = propertiesMatch[i];
+    if (isArraySelector) {
+      // Parse the array contents - this is a more complex case
+      // Look for patterns like [entity.prop1, entity.prop2] or [entity.obj.prop1, entity.prop2]
+      const properties = this.extractPropertiesFromArray(selectorStr);
 
-          // Verificar se temos uma origem para essa propriedade
-          const propSource = this.propertyTracker.getPropertySource(propName);
-          const tableAlias = propSource ? propSource.tableAlias : this.alias;
+      for (const prop of properties) {
+        if (prop.isNested) {
+          // Handle nested property
+          // Try to find the correct table alias
+          let tableAlias = this.alias;
+          const objectName = prop.objectName;
+          const propertyName = prop.propertyName;
 
-          const column = this.expressionBuilder.createColumn(propName, tableAlias);
+          if (this.propertyTracker) {
+            // Try to resolve the table alias using the same strategies as in other methods
+            const objectSource = this.propertyTracker.getPropertySource(objectName);
+            if (objectSource) {
+              tableAlias = objectSource.tableAlias;
+            } else {
+              // Check wildcards
+              const wildcardSource = this.propertyTracker.getPropertySource(`${objectName}.*`);
+              if (wildcardSource) {
+                tableAlias = wildcardSource.tableAlias;
+              } else {
+                // Check table aliases
+                for (const alias of this.propertyTracker.getTableAliases()) {
+                  if (
+                    alias === objectName ||
+                    objectName.charAt(0).toLowerCase() === alias.toLowerCase()
+                  ) {
+                    tableAlias = alias;
+                    break;
+                  }
+                }
+              }
+            }
+          }
+
+          // Create and add the column expression
+          const column = this.expressionBuilder.createColumn(propertyName, tableAlias);
+          newQueryable.groupByColumns.push(column);
+        } else {
+          // Handle simple property
+          const column = this.expressionBuilder.createColumn(prop.propertyName, this.alias);
           newQueryable.groupByColumns.push(column);
         }
       }
     } else {
-      // Lidar com o caso de propriedade única
-      const propertyMatch = fnStr.match(/=>\s*\w+\.(\w+)/);
-      if (propertyMatch && propertyMatch[1]) {
-        const propName = propertyMatch[1];
+      // Single property selector
+      const enhancedParser = new LambdaParser(
+        this.expressionBuilder,
+        this.contextVariables,
+        this.propertyTracker,
+      );
 
-        // Verificar se temos uma origem para essa propriedade
-        const propSource = this.propertyTracker.getPropertySource(propName);
-        const tableAlias = propSource ? propSource.tableAlias : this.alias;
-
-        const column = this.expressionBuilder.createColumn(propName, tableAlias);
-        newQueryable.groupByColumns.push(column);
-      } else {
-        throw new Error(`Não foi possível extrair propriedades do seletor de groupBy: ${fnStr}`);
-      }
+      // Parse the selector with support for nested properties
+      const column = enhancedParser.parseAggregationSelector<T>(selector as any, this.alias);
+      newQueryable.groupByColumns.push(column);
     }
 
     return newQueryable;
@@ -857,21 +885,133 @@ export class Queryable<T> {
    * Adds a HAVING clause to the query
    * @param predicate The predicate function
    */
-  having(predicate: PredicateFunction<T>): Queryable<T> {
+  having(predicate: PredicateFunction<any>): Queryable<T> {
     // Create a new queryable
     const newQueryable = this.clone();
 
-    // Parse the predicate into an expression
-    const predicateExpr = this.lambdaParser.parsePredicate<T>(predicate, this.alias);
+    // Extract the predicate string for pattern matching
+    const predicateStr = predicate.toString();
 
-    // If there's already a having clause, AND it with the new one
-    if (newQueryable.havingClause) {
-      newQueryable.havingClause = this.expressionBuilder.createAnd(
-        newQueryable.havingClause,
-        predicateExpr,
+    // Check for aggregate patterns like g.count > 5
+    const aggregatePattern = /(\w+)\.(count|sum|avg|min|max)\s*([><=!]+)\s*(\d+)/i;
+    const aggregateMatch = predicateStr.match(aggregatePattern);
+
+    if (aggregateMatch) {
+      // We found an aggregate comparison pattern
+      const [_, paramName, aggFunction, operator, value] = aggregateMatch;
+
+      // Map the operator string to an expression type
+      let exprType: ExpressionType;
+      switch (operator) {
+        case '>':
+          exprType = ExpressionType.GreaterThan;
+          break;
+        case '>=':
+          exprType = ExpressionType.GreaterThanOrEqual;
+          break;
+        case '<':
+          exprType = ExpressionType.LessThan;
+          break;
+        case '<=':
+          exprType = ExpressionType.LessThanOrEqual;
+          break;
+        case '=':
+        case '==':
+        case '===':
+          exprType = ExpressionType.Equal;
+          break;
+        case '!=':
+        case '!==':
+          exprType = ExpressionType.NotEqual;
+          break;
+        default:
+          throw new Error(`Unsupported operator: ${operator}`);
+      }
+
+      // Create the appropriate function expression
+      let aggExpr: Expression;
+      switch (aggFunction.toUpperCase()) {
+        case 'COUNT':
+          aggExpr = this.expressionBuilder.createCount(null);
+          break;
+        case 'SUM':
+          // Try to determine which column to sum based on projections
+          const sumColumn = this.findColumnForAggregate('SUM');
+          aggExpr = this.expressionBuilder.createSum(sumColumn);
+          break;
+        case 'AVG':
+          const avgColumn = this.findColumnForAggregate('AVG');
+          aggExpr = this.expressionBuilder.createAvg(avgColumn);
+          break;
+        case 'MIN':
+          const minColumn = this.findColumnForAggregate('MIN');
+          aggExpr = this.expressionBuilder.createMin(minColumn);
+          break;
+        case 'MAX':
+          const maxColumn = this.findColumnForAggregate('MAX');
+          aggExpr = this.expressionBuilder.createMax(maxColumn);
+          break;
+        default:
+          throw new Error(`Unsupported aggregate function: ${aggFunction}`);
+      }
+
+      // Create a constant expression for the comparison value
+      const valueConst = this.expressionBuilder.createConstant(Number(value));
+
+      // Create the binary expression for the HAVING clause
+      const havingExpr = this.expressionBuilder.createBinary(exprType, aggExpr, valueConst);
+
+      // Add to existing having clause or set as new having clause
+      if (newQueryable.havingClause) {
+        newQueryable.havingClause = this.expressionBuilder.createAnd(
+          newQueryable.havingClause,
+          havingExpr,
+        );
+      } else {
+        newQueryable.havingClause = havingExpr;
+      }
+
+      return newQueryable;
+    }
+
+    // If not a recognized aggregate pattern, try normal parsing
+    try {
+      // Create a lambda parser with property tracking information
+      const enhancedParser = new LambdaParser(
+        this.expressionBuilder,
+        this.contextVariables,
+        this.propertyTracker,
       );
-    } else {
-      newQueryable.havingClause = predicateExpr;
+
+      // Attempt to parse with enhanced support
+      const predicateExpr = enhancedParser.parsePredicateWithNesting<T>(predicate, this.alias);
+
+      // If there's already a having clause, AND it with the new one
+      if (newQueryable.havingClause) {
+        newQueryable.havingClause = this.expressionBuilder.createAnd(
+          newQueryable.havingClause,
+          predicateExpr,
+        );
+      } else {
+        newQueryable.havingClause = predicateExpr;
+      }
+    } catch (err) {
+      console.warn(
+        'Error processing having predicate with enhanced parser, falling back to standard method:',
+        err,
+      );
+
+      // Fallback to standard parsing method
+      const predicateExpr = this.lambdaParser.parsePredicate<any>(predicate, this.alias);
+
+      if (newQueryable.havingClause) {
+        newQueryable.havingClause = this.expressionBuilder.createAnd(
+          newQueryable.havingClause,
+          predicateExpr,
+        );
+      } else {
+        newQueryable.havingClause = predicateExpr;
+      }
     }
 
     return newQueryable;
@@ -922,130 +1062,43 @@ export class Queryable<T> {
    * Counts the number of records
    * @param selector Optional selector for the column to count
    */
-  count<TResult = number>(selector?: AggregateSelector<T>): Queryable<TResult> {
-    // Create a new queryable with the new result type
-    const newQueryable = this.cloneWithNewType<TResult>();
-
-    // If a selector is provided, parse it
-    let countExpr: Expression | null = null;
-
-    if (selector) {
-      // Extract the column name
-      const fnStr = selector.toString();
-      const propertyMatch = fnStr.match(/=>\s*\w+\.(\w+)/);
-
-      if (propertyMatch && propertyMatch[1]) {
-        countExpr = this.expressionBuilder.createColumn(propertyMatch[1], this.alias);
-      } else {
-        throw new Error(`Could not extract property from count selector: ${fnStr}`);
-      }
-    }
-
-    // Create the COUNT function
-    const countFunc = this.expressionBuilder.createCount(countExpr);
-
-    // Add the projection
-    newQueryable.projections = [this.expressionBuilder.createProjection(countFunc, 'count')];
-
-    return newQueryable;
+  count<TResult = number>(
+    selector?: AggregateSelector<T>,
+    alias: string = 'count',
+  ): Queryable<TResult> {
+    return this.applyAggregation<TResult>(selector || null, 'COUNT', alias, !!selector);
   }
 
   /**
    * Gets the maximum value of a column
    * @param selector Function to select the column
    */
-  max<TResult>(selector: AggregateSelector<T>): Queryable<TResult> {
-    // Create a new queryable with the new result type
-    const newQueryable = this.cloneWithNewType<TResult>();
-
-    // Extract the column name
-    const fnStr = selector.toString();
-    const propertyMatch = fnStr.match(/=>\s*\w+\.(\w+)/);
-
-    if (!propertyMatch || !propertyMatch[1]) {
-      throw new Error(`Could not extract property from max selector: ${fnStr}`);
-    }
-
-    // Create column expression
-    const column = this.expressionBuilder.createColumn(propertyMatch[1], this.alias);
-
-    // Create the MAX function
-    const maxFunc = this.expressionBuilder.createMax(column);
-
-    // Add the projection
-    newQueryable.projections = [this.expressionBuilder.createProjection(maxFunc, 'max')];
-
-    return newQueryable;
+  max<TResult>(selector: AggregateSelector<T>, alias: string = 'max'): Queryable<TResult> {
+    return this.applyAggregation<TResult>(selector, 'MAX', alias);
   }
 
   /**
    * Gets the minimum value of a column
    * @param selector Function to select the column
    */
-  min<TResult>(selector: AggregateSelector<T>): Queryable<TResult> {
-    // Create a new queryable with the new result type
-    const newQueryable = this.cloneWithNewType<TResult>();
-
-    // Obter o nome da propriedade diretamente do seletor
-    const selectorStr = selector.toString();
-    const propertyMatch = selectorStr.match(/=>\s*\w+\.(\w+)/);
-
-    if (!propertyMatch || !propertyMatch[1]) {
-      throw new Error(`Could not extract property from min selector: ${selectorStr}`);
-    }
-
-    const propertyName = propertyMatch[1];
-
-    // Criar expressão de coluna
-    const column = this.expressionBuilder.createColumn(propertyName, this.alias);
-
-    // Create the MIN function
-    const minFunc = this.expressionBuilder.createMin(column);
-
-    // Add the projection
-    newQueryable.projections = [this.expressionBuilder.createProjection(minFunc, 'min')];
-
-    return newQueryable;
+  min<TResult>(selector: AggregateSelector<T>, alias: string = 'min'): Queryable<TResult> {
+    return this.applyAggregation<TResult>(selector, 'MIN', alias);
   }
 
   /**
    * Gets the sum of values in a column
    * @param selector Function to select the column
    */
-  sum<TResult>(selector: AggregateSelector<T>): Queryable<TResult> {
-    // Create a new queryable with the new result type
-    const newQueryable = this.cloneWithNewType<TResult>();
-
-    // Parse the selector to get the correct column expression
-    const column = this.lambdaParser.parseAggregationSelector(selector, this.alias);
-
-    // Create the SUM function
-    const sumFunc = this.expressionBuilder.createSum(column);
-
-    // Add the projection
-    newQueryable.projections = [this.expressionBuilder.createProjection(sumFunc, 'sum')];
-
-    return newQueryable;
+  sum<TResult>(selector: AggregateSelector<T>, alias: string = 'sum'): Queryable<TResult> {
+    return this.applyAggregation<TResult>(selector, 'SUM', alias);
   }
 
   /**
    * Gets the average value of a column
    * @param selector Function to select the column
    */
-  avg<TResult>(selector: AggregateSelector<T>): Queryable<TResult> {
-    // Create a new queryable with the new result type
-    const newQueryable = this.cloneWithNewType<TResult>();
-
-    // Parse the selector to get the correct column expression
-    const column = this.lambdaParser.parseAggregationSelector(selector, this.alias);
-
-    // Create the AVG function
-    const avgFunc = this.expressionBuilder.createAvg(column);
-
-    // Add the projection
-    newQueryable.projections = [this.expressionBuilder.createProjection(avgFunc, 'avg')];
-
-    return newQueryable;
+  avg<TResult>(selector: AggregateSelector<T>, alias: string = 'avg'): Queryable<TResult> {
+    return this.applyAggregation<TResult>(selector, 'AVG', alias);
   }
 
   /**
@@ -1350,60 +1403,132 @@ export class Queryable<T> {
     return result;
   }
   /**
-   * Substitui uma propriedade aninhada em uma expressão
-   * @param expr Expressão onde a substituição deve ser feita
-   * @param fullPath Caminho completo da propriedade (ex: "joined.order.amount")
-   * @param objectName Nome do objeto intermediário (ex: "order")
-   * @param propertyName Nome da propriedade final (ex: "amount")
-   * @returns Expressão com a propriedade aninhada substituída
+   * Helper method to extract properties from an array selector
+   * @param selectorStr The selector function as a string
    */
-  private replaceNestedPropertyInExpression(
-    expr: Expression,
-    fullPath: string,
-    objectName: string,
-    propertyName: string,
-  ): Expression {
-    // Se a expressão é uma expressão binária, processar seus operandos
-    if (expr instanceof BinaryExpression) {
-      const left = this.replaceNestedPropertyInExpression(
-        expr.getLeft(),
-        fullPath,
-        objectName,
-        propertyName,
-      );
+  private extractPropertiesFromArray(selectorStr: string): Array<{
+    isNested: boolean;
+    objectName?: string;
+    propertyName: string;
+  }> {
+    const result: Array<{
+      isNested: boolean;
+      objectName?: string;
+      propertyName: string;
+    }> = [];
 
-      const right = this.replaceNestedPropertyInExpression(
-        expr.getRight(),
-        fullPath,
-        objectName,
-        propertyName,
-      );
+    // Extract the array part: everything between [ and ]
+    const arrayMatch = selectorStr.match(/\[\s*(.+?)\s*\]/s);
+    if (!arrayMatch || !arrayMatch[1]) return result;
 
-      return this.expressionBuilder.createBinary(expr.getOperatorType(), left, right);
+    const arrayContent = arrayMatch[1];
+
+    // Split by commas, accounting for possible nested structures
+    const items = this.splitArrayItems(arrayContent);
+
+    for (const item of items) {
+      // Check for nested property: entity.object.property
+      const nestedMatch = item.match(/\w+\.(\w+)\.(\w+)/);
+      if (nestedMatch) {
+        result.push({
+          isNested: true,
+          objectName: nestedMatch[1],
+          propertyName: nestedMatch[2],
+        });
+      } else {
+        // Simple property: entity.property
+        const simpleMatch = item.match(/\w+\.(\w+)/);
+        if (simpleMatch) {
+          result.push({
+            isNested: false,
+            propertyName: simpleMatch[1],
+          });
+        }
+      }
     }
 
-    // Se a expressão é uma expressão de coluna que corresponde à nossa busca
-    if (expr instanceof ColumnExpression) {
-      const columnName = expr.getColumnName();
+    return result;
+  }
 
-      // Verificar se esta coluna corresponde à propriedade aninhada
-      // Isso é uma heurística simples - na prática, precisaríamos de uma análise mais sofisticada
-      // if (columnName === propertyName) {
-      //   // Tentar resolver a tabela correta para o objeto intermediário
-      //   const resolvedInfo = this.resolvePropertyPath(
-      //     `=> ${this.parameterName}.${objectName}.${propertyName}`,
-      //     this.alias,
-      //   );
+  /**
+   * Helper method to split array items correctly, respecting nested structures
+   * @param arrayContent The content of the array
+   */
+  private splitArrayItems(arrayContent: string): string[] {
+    const items: string[] = [];
+    let currentItem = '';
+    let parenCount = 0;
+    let bracketCount = 0;
 
-      //   // Se conseguimos resolver, criar uma nova expressão de coluna com o alias correto
-      //   if (resolvedInfo.tableAlias !== this.alias) {
-      //     return this.expressionBuilder.createColumn(propertyName, resolvedInfo.tableAlias);
-      //   }
-      // }
+    for (let i = 0; i < arrayContent.length; i++) {
+      const char = arrayContent[i];
+
+      if (char === '(') parenCount++;
+      if (char === ')') parenCount--;
+      if (char === '[') bracketCount++;
+      if (char === ']') bracketCount--;
+
+      if (char === ',' && parenCount === 0 && bracketCount === 0) {
+        items.push(currentItem.trim());
+        currentItem = '';
+      } else {
+        currentItem += char;
+      }
     }
 
-    // Se não é um caso que precisamos tratar, retornar a expressão original
-    return expr;
+    if (currentItem.trim()) {
+      items.push(currentItem.trim());
+    }
+
+    return items;
+  }
+
+  /**
+   * Helper method to find a column for an aggregate function in HAVING clause
+   * @param aggregateType The type of aggregate function
+   */
+  private findColumnForAggregate(aggregateType: string): Expression {
+    // First check if we have this aggregate in projections
+    for (const projection of this.projections) {
+      const expr = projection.getExpression();
+
+      if (expr instanceof FunctionExpression && expr.getFunctionName() === aggregateType) {
+        // Return the first argument of the function
+        const args = expr.getArguments();
+        if (args.length > 0) {
+          return args[0];
+        }
+      }
+    }
+
+    // If we don't have a matching projection, try to infer from context
+    // For example, if we're doing SUM and have a "total" column, use that
+    if (this.groupByColumns.length > 0) {
+      // Default to using the first non-GROUP BY column
+      for (const projection of this.projections) {
+        const expr = projection.getExpression();
+
+        if (expr instanceof ColumnExpression) {
+          // Check if this column is NOT in the GROUP BY
+          const isInGroupBy = this.groupByColumns.some(groupCol => {
+            if (groupCol instanceof ColumnExpression) {
+              return (
+                groupCol.getTableAlias() === expr.getTableAlias() &&
+                groupCol.getColumnName() === expr.getColumnName()
+              );
+            }
+            return false;
+          });
+
+          if (!isInGroupBy) {
+            return expr;
+          }
+        }
+      }
+    }
+
+    // Last resort: use a wildcard (*)
+    return this.expressionBuilder.createConstant('*');
   }
 
   toMetadata(): SelectExpression {
@@ -1419,6 +1544,189 @@ export class Queryable<T> {
       this.offsetValue,
       this.isDistinct,
     );
+  }
+
+  /**
+   * Helper function to handle aggregation operations with correct GROUP BY semantics
+   * @param selector The selector function
+   * @param aggregateType The type of aggregation (SUM, AVG, MIN, MAX, COUNT)
+   * @param alias The alias for the result column
+   * @param useExplicitColumn For COUNT, whether to use the selected column or COUNT(*)
+   */
+  private applyAggregation<TResult>(
+    selector: AggregateSelector<T> | null,
+    aggregateType: 'SUM' | 'AVG' | 'MIN' | 'MAX' | 'COUNT',
+    alias: string,
+    useExplicitColumn: boolean = true,
+  ): Queryable<TResult> {
+    // Create a new queryable with the new result type
+    const newQueryable = this.cloneWithNewType<TResult>();
+
+    // Extract column information and create the aggregate function
+    let aggregateFunc: Expression;
+
+    if (!selector && aggregateType === 'COUNT') {
+      // Special case: COUNT(*) with no selector
+      aggregateFunc = this.expressionBuilder.createCount(null);
+    } else if (selector) {
+      // Extract the property name from the selector
+      const selectorStr = selector.toString();
+      const propMatch = selectorStr.match(/[gs]\.([a-zA-Z0-9_]+)(?:\.|$)/);
+
+      if (propMatch && propMatch[1]) {
+        // We extracted the property name, now find which table it belongs to
+        const propName = propMatch[1];
+        let tableAlias = this.alias; // Default to the main table
+        let columnName = propName;
+
+        // Look through the existing projections to find this property
+        for (const projection of this.projections) {
+          if (projection.getAlias() === propName) {
+            // Found in projections - extract the table alias
+            const expr = projection.getExpression();
+            if (expr instanceof ColumnExpression) {
+              tableAlias = expr.getTableAlias();
+              columnName = expr.getColumnName();
+              break;
+            }
+          }
+        }
+
+        // If not found in projections, check property tracker
+        if (tableAlias === this.alias && this.propertyTracker) {
+          const propSource = this.propertyTracker.getPropertySource(propName);
+          if (propSource) {
+            tableAlias = propSource.tableAlias;
+            columnName = propSource.columnName !== '*' ? propSource.columnName : propName;
+          }
+        }
+
+        // Create the column expression with the correct table alias
+        const column = this.expressionBuilder.createColumn(columnName, tableAlias);
+
+        // Create the aggregate function
+        switch (aggregateType) {
+          case 'SUM':
+            aggregateFunc = this.expressionBuilder.createSum(column);
+            break;
+          case 'AVG':
+            aggregateFunc = this.expressionBuilder.createAvg(column);
+            break;
+          case 'MIN':
+            aggregateFunc = this.expressionBuilder.createMin(column);
+            break;
+          case 'MAX':
+            aggregateFunc = this.expressionBuilder.createMax(column);
+            break;
+          case 'COUNT':
+            aggregateFunc = this.expressionBuilder.createCount(useExplicitColumn ? column : null);
+            break;
+        }
+      } else {
+        // Fall back to the enhanced parser approach if we couldn't extract the property
+        const enhancedParser = new LambdaParser(
+          this.expressionBuilder,
+          this.contextVariables,
+          this.propertyTracker,
+        );
+
+        const column = enhancedParser.parseAggregationSelector<T>(selector, this.alias);
+
+        // Create the aggregate function
+        switch (aggregateType) {
+          case 'SUM':
+            aggregateFunc = this.expressionBuilder.createSum(column);
+            break;
+          case 'AVG':
+            aggregateFunc = this.expressionBuilder.createAvg(column);
+            break;
+          case 'MIN':
+            aggregateFunc = this.expressionBuilder.createMin(column);
+            break;
+          case 'MAX':
+            aggregateFunc = this.expressionBuilder.createMax(column);
+            break;
+          case 'COUNT':
+            aggregateFunc = this.expressionBuilder.createCount(useExplicitColumn ? column : null);
+            break;
+        }
+      }
+    } else {
+      // Default fallback for other cases
+      const enhancedParser = new LambdaParser(
+        this.expressionBuilder,
+        this.contextVariables,
+        this.propertyTracker,
+      );
+
+      // Use a generic expression if no selector is provided (except for COUNT)
+      const column = selector
+        ? enhancedParser.parseAggregationSelector<T>(selector, this.alias)
+        : this.expressionBuilder.createConstant('*');
+
+      // Create the aggregate function
+      switch (aggregateType) {
+        case 'SUM':
+          aggregateFunc = this.expressionBuilder.createSum(column);
+          break;
+        case 'AVG':
+          aggregateFunc = this.expressionBuilder.createAvg(column);
+          break;
+        case 'MIN':
+          aggregateFunc = this.expressionBuilder.createMin(column);
+          break;
+        case 'MAX':
+          aggregateFunc = this.expressionBuilder.createMax(column);
+          break;
+        case 'COUNT':
+          aggregateFunc = this.expressionBuilder.createCount(null);
+          break;
+      }
+    }
+
+    // Filter projections to only include ones that are part of the GROUP BY or aggregates
+    if (this.groupByColumns.length > 0) {
+      // Map GROUP BY columns to strings for easy comparison
+      const groupByColumns = this.groupByColumns
+        .map(col => {
+          if (col instanceof ColumnExpression) {
+            return `${col.getTableAlias()}.${col.getColumnName()}`;
+          }
+          return null;
+        })
+        .filter(Boolean) as string[];
+
+      // Filter projections to only include valid columns for GROUP BY
+      newQueryable.projections = this.projections.filter(projection => {
+        const expr = projection.getExpression();
+
+        // Keep if it's already an aggregate function
+        if (
+          expr instanceof FunctionExpression &&
+          ['SUM', 'AVG', 'MIN', 'MAX', 'COUNT'].includes(expr.getFunctionName())
+        ) {
+          return true;
+        }
+
+        // Keep if it's a column that's part of the GROUP BY
+        if (expr instanceof ColumnExpression) {
+          const columnKey = `${expr.getTableAlias()}.${expr.getColumnName()}`;
+          return groupByColumns.includes(columnKey);
+        }
+
+        // Conservatively keep expressions we can't analyze
+        return false;
+      });
+    } else {
+      // If there's no GROUP BY, we're adding an aggregate to a regular query
+      // Keep existing projections
+      newQueryable.projections = [...this.projections];
+    }
+
+    // Add the aggregate function projection
+    newQueryable.projections.push(this.expressionBuilder.createProjection(aggregateFunc, alias));
+
+    return newQueryable;
   }
 
   async toListAsync(): Promise<Record<string, any>[]> {

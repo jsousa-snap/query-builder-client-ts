@@ -74,4 +74,27 @@ describe('Aggregation Queries', () => {
       normalizeSQL('SELECT AVG(u.age) AS avg FROM users AS u WHERE (u.age > 18)'),
     );
   });
+
+  test('Aggregation with where clause and join', () => {
+    const query = users
+      .where(u => u.age > 18)
+      .join(
+        orders,
+        user => user.id,
+        order => order.userId,
+        (user, order) => ({
+          user,
+          order,
+        }),
+      )
+      .where(joined => joined.order.amount > 100)
+      .avg(joined => joined.order.amount);
+    const sql = query.toQueryString();
+
+    expect(normalizeSQL(sql)).toContain(
+      normalizeSQL(
+        'SELECT AVG(o.amount) AS avg FROM users AS u INNER JOIN orders AS o ON (u.id = o.userId) WHERE ((u.age > 18) AND (o.amount > 100))',
+      ),
+    );
+  });
 });
