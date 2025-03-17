@@ -62,11 +62,7 @@ export class Queryable<T> {
     propertyTracker?: PropertyTracker,
   ) {
     this.expressionBuilder = new ExpressionBuilder();
-    this.lambdaParser = new LambdaParser(
-      this.expressionBuilder,
-      this.expressionBuilder,
-      contextVariables,
-    );
+    this.lambdaParser = new LambdaParser(this.expressionBuilder, contextVariables);
     this.fromTable = this.expressionBuilder.createTable(tableName, alias);
 
     // Inicializar o rastreador de propriedades
@@ -118,64 +114,46 @@ export class Queryable<T> {
    * @param predicate The predicate function
    */
   where(predicate: PredicateFunction<T>): Queryable<T> {
-    // Obter a string da função predicado
-    const predicateStr = predicate.toString();
-
-    // Criar um novo queryable
+    // Create a new queryable
     const newQueryable = this.clone();
 
-    // Verificar se o predicado contém propriedades aninhadas
-    const hasNestedProperties = predicateStr.match(/\w+\.\w+\.\w+/) !== null;
-
-    if (hasNestedProperties) {
-      try {
-        // Analisar o predicado manualmente para detectar propriedades aninhadas
-        const nestedProperties = this.extractNestedProperties(predicateStr);
-
-        // Se encontramos propriedades aninhadas, criar uma expressão WHERE customizada
-        if (nestedProperties.length > 0) {
-          // Primeiro, processamos o predicado normalmente
-          let predicateExpr = this.lambdaParser.parsePredicate<T>(predicate, this.alias);
-
-          // Depois, substituímos as propriedades aninhadas com os aliases corretos
-          for (const prop of nestedProperties) {
-            predicateExpr = this.replaceNestedPropertyInExpression(
-              predicateExpr,
-              prop.fullPath,
-              prop.objectName,
-              prop.propertyName,
-            );
-          }
-
-          // Se já existe uma cláusula where, fazer um AND com a nova
-          if (newQueryable.whereClause) {
-            newQueryable.whereClause = this.expressionBuilder.createAnd(
-              newQueryable.whereClause,
-              predicateExpr,
-            );
-          } else {
-            newQueryable.whereClause = predicateExpr;
-          }
-
-          return newQueryable;
-        }
-      } catch (err) {
-        console.warn('Erro ao processar predicado aninhado:', err);
-        // Fallback para o método padrão
-      }
-    }
-
-    // Método padrão: analisar o predicado normalmente
-    const predicateExpr = this.lambdaParser.parsePredicate<T>(predicate, this.alias);
-
-    // Se já existe uma cláusula where, fazer um AND com a nova
-    if (newQueryable.whereClause) {
-      newQueryable.whereClause = this.expressionBuilder.createAnd(
-        newQueryable.whereClause,
-        predicateExpr,
+    try {
+      // Create a lambda parser with property tracking information
+      const enhancedParser = new LambdaParser(
+        this.expressionBuilder,
+        this.contextVariables,
+        this.propertyTracker,
       );
-    } else {
-      newQueryable.whereClause = predicateExpr;
+
+      // Attempt to parse with enhanced nested property support
+      const predicateExpr = enhancedParser.parsePredicateWithNesting<T>(predicate, this.alias);
+
+      // If there's already a where clause, AND it with the new one
+      if (newQueryable.whereClause) {
+        newQueryable.whereClause = this.expressionBuilder.createAnd(
+          newQueryable.whereClause,
+          predicateExpr,
+        );
+      } else {
+        newQueryable.whereClause = predicateExpr;
+      }
+    } catch (err) {
+      console.warn(
+        'Error processing predicate with enhanced parser, falling back to standard method:',
+        err,
+      );
+
+      // Fallback to standard parsing method
+      const predicateExpr = this.lambdaParser.parsePredicate<T>(predicate, this.alias);
+
+      if (newQueryable.whereClause) {
+        newQueryable.whereClause = this.expressionBuilder.createAnd(
+          newQueryable.whereClause,
+          predicateExpr,
+        );
+      } else {
+        newQueryable.whereClause = predicateExpr;
+      }
     }
 
     return newQueryable;
@@ -359,7 +337,6 @@ export class Queryable<T> {
     try {
       // Extrair os mapeamentos de propriedades usando o LambdaParser aprimorado
       const lambdaParser = new LambdaParser(
-        this.expressionBuilder,
         this.expressionBuilder,
         this.contextVariables,
         this.propertyTracker,
