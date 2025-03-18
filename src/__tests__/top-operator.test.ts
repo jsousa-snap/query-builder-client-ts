@@ -38,7 +38,8 @@ describe('Operador TOP', () => {
     const query = users.limit(10).toQueryString();
 
     // Assert
-    expect(normalizeSQL(query)).toContain(normalizeSQL('SELECT TOP 10 * FROM users AS u'));
+    expect(query).toEqual(`SELECT TOP 10 *
+FROM [users] AS [u]`);
   });
 
   test('top() combinado com outras cláusulas', () => {
@@ -53,11 +54,10 @@ describe('Operador TOP', () => {
       .toQueryString();
 
     // Assert
-    expect(normalizeSQL(query)).toContain(
-      normalizeSQL(
-        "SELECT TOP 5 * FROM users AS u WHERE LIKE(u.name, CONCAT('%', 'John', '%')) ORDER BY u.id ASC",
-      ),
-    );
+    expect(query).toEqual(`SELECT TOP 5 *
+FROM [users] AS [u]
+WHERE [u].[name] LIKE CONCAT(N'%', N'John', N'%')
+ORDER BY [u].[id] ASC`);
   });
 
   test('top() após select()', () => {
@@ -74,9 +74,9 @@ describe('Operador TOP', () => {
       .toQueryString();
 
     // Assert
-    expect(normalizeSQL(query)).toContain(
-      normalizeSQL('SELECT TOP 3 u.id AS id, u.name AS name FROM users AS u'),
-    );
+    expect(query).toEqual(`SELECT TOP 3
+  [u].[id] AS [id], [u].[name] AS [name]
+FROM [users] AS [u]`);
   });
 
   test('top() chamado diretamente do DbSet', () => {
@@ -90,8 +90,8 @@ describe('Operador TOP', () => {
       .toQueryString();
 
     // Assert
-    expect(normalizeSQL(query)).toContain(
-      normalizeSQL('SELECT TOP 20 * FROM users AS u WHERE (u.id > 100)'),
-    );
+    expect(query).toEqual(`SELECT TOP 20 *
+FROM [users] AS [u]
+WHERE ([u].[id] > 100)`);
   });
 });

@@ -84,7 +84,7 @@ FETCH NEXT 5 ROWS ONLY`);
 
     expect(sql).toEqual(`SELECT *
 FROM [users] AS [u]
-  INNER JOIN [orders] AS [o] ON ([u].[id] = [o].[userId])
+INNER JOIN [orders] AS [o] ON ([u].[id] = [o].[userId])
 ORDER BY [u].[age] ASC
 OFFSET 16 ROWS
 FETCH NEXT 8 ROWS ONLY`);

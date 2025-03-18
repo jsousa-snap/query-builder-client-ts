@@ -384,6 +384,12 @@ export class SqlServerGenerationVisitor implements IExpressionVisitor<string> {
     this.appendLine('');
     this.append(this.getIndent() + 'FROM ' + expr.getFromTable().accept(this));
 
+    // Add JOINs
+    const joins = expr.getJoins();
+    joins.forEach(j => {
+      this.appendLine(this.getIndent() + j.accept(this));
+    });
+
     // Add WHERE clause
     const whereClause = expr.getWhereClause();
     if (whereClause) {

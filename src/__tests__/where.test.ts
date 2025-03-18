@@ -22,58 +22,53 @@ describe('Where Queries', () => {
     const query = users.where(u => u.age === 18);
     const sql = query.toQueryString();
 
-    expect(normalizeSQL(sql)).toContain(
-      normalizeSQL('SELECT * FROM users AS u WHERE (u.age = 18)'),
-    );
+    expect(sql).toEqual(`SELECT *
+FROM [users] AS [u]
+WHERE ([u].[age] = 18)`);
   });
 
   test('Greater than condition', () => {
     const query = users.where(u => u.age > 18);
     const sql = query.toQueryString();
 
-    expect(normalizeSQL(sql)).toContain(
-      normalizeSQL('SELECT * FROM users AS u WHERE (u.age > 18)'),
-    );
+    expect(sql).toEqual(`SELECT *
+FROM [users] AS [u]
+WHERE ([u].[age] > 18)`);
   });
 
   test('Multiple conditions with AND', () => {
     const query = users.where(u => u.age > 18 && u.isActive === true);
     const sql = query.toQueryString();
 
-    expect(normalizeSQL(sql)).toContain(
-      normalizeSQL('SELECT * FROM users AS u WHERE ((u.age > 18) AND (u.isActive = 1))'),
-    );
+    expect(sql).toEqual(`SELECT *
+FROM [users] AS [u]
+WHERE (([u].[age] > 18) AND ([u].[isActive] = 1))`);
   });
 
   test('Multiple conditions with OR', () => {
     const query = users.where(u => u.age < 18 || u.name.includes('Junior'));
     const sql = query.toQueryString();
 
-    expect(sql).toContain(
-      `SELECT
-  *
-FROM users AS u
-WHERE
-  ((u.age < 18) OR
-  LIKE(u.name, CONCAT('%', 'Junior', '%')))`,
-    );
+    expect(sql).toEqual(`SELECT *
+FROM [users] AS [u]
+WHERE (([u].[age] < 18) OR [u].[name] LIKE CONCAT(N'%', N'Junior', N'%'))`);
   });
 
   test('String contains condition', () => {
     const query = users.where(u => u.name.includes('John'));
     const sql = query.toQueryString();
 
-    expect(normalizeSQL(sql)).toContain(
-      normalizeSQL(`SELECT * FROM users AS u WHERE LIKE(u.name, CONCAT('%', 'John', '%'))`),
-    );
+    expect(sql).toEqual(`SELECT *
+FROM [users] AS [u]
+WHERE [u].[name] LIKE CONCAT(N'%', N'John', N'%')`);
   });
 
   test('Null condition', () => {
     const query = users.where(u => u.email === null);
     const sql = query.toQueryString();
 
-    expect(normalizeSQL(sql)).toContain(
-      normalizeSQL('SELECT * FROM users AS u WHERE (u.email = NULL)'),
-    );
+    expect(sql).toEqual(`SELECT *
+FROM [users] AS [u]
+WHERE ([u].[email] = NULL)`);
   });
 });

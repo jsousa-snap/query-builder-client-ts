@@ -103,9 +103,9 @@ describe('Complex Join Calculations Tests', () => {
     expect(sql).toEqual(`SELECT
   [u].[name] AS [userName], [p].[name] AS [productName], [o1].[quantity] AS [quantity], ([o1].[quantity] * [p].[price]) AS [total]
 FROM [users] AS [u]
-  INNER JOIN [orders] AS [o] ON ([u].[id] = [o].[userId])
-  INNER JOIN [order_items] AS [o1] ON ([o].[id] = [o1].[orderId])
-  INNER JOIN [products] AS [p] ON ([o1].[productId] = [p].[id])`);
+INNER JOIN [orders] AS [o] ON ([u].[id] = [o].[userId])
+INNER JOIN [order_items] AS [o1] ON ([o].[id] = [o1].[orderId])
+INNER JOIN [products] AS [p] ON ([o1].[productId] = [p].[id])`);
 
     // Testar a execução da consulta
     return query.toListAsync().then(results => {
@@ -162,9 +162,9 @@ FROM [users] AS [u]
     expect(sql).toEqual(`SELECT
   [u].[name] AS [userName], [p].[name] AS [productName], [o1].[quantity] AS [quantity], ([o1].[quantity] * [p].[price]) AS [total]
 FROM [users] AS [u]
-  INNER JOIN [orders] AS [o] ON ([u].[id] = [o].[userId])
-  INNER JOIN [order_items] AS [o1] ON ([o].[id] = [o1].[orderId])
-  INNER JOIN [products] AS [p] ON ([o1].[productId] = [p].[id])
+INNER JOIN [orders] AS [o] ON ([u].[id] = [o].[userId])
+INNER JOIN [order_items] AS [o1] ON ([o].[id] = [o1].[orderId])
+INNER JOIN [products] AS [p] ON ([o1].[productId] = [p].[id])
 WHERE ((([o].[status] = N'completed') AND ([p].[price] > 100)) AND ([o1].[quantity] >= 1))`);
   });
 
@@ -210,9 +210,9 @@ WHERE ((([o].[status] = N'completed') AND ([p].[price] > 100)) AND ([o1].[quanti
     expect(sql).toEqual(`SELECT
   [u].[id] AS [userId], [p].[id] AS [productId], SUM([o1].[quantity]) AS [totalQuantity], SUM([p].[price]) AS [totalAmount]
 FROM [users] AS [u]
-  INNER JOIN [orders] AS [o] ON ([u].[id] = [o].[userId])
-  INNER JOIN [order_items] AS [o1] ON ([o].[id] = [o1].[orderId])
-  INNER JOIN [products] AS [p] ON ([o1].[productId] = [p].[id])
+INNER JOIN [orders] AS [o] ON ([u].[id] = [o].[userId])
+INNER JOIN [order_items] AS [o1] ON ([o].[id] = [o1].[orderId])
+INNER JOIN [products] AS [p] ON ([o1].[productId] = [p].[id])
 GROUP BY [u].[id], [p].[id]
 HAVING (SUM([o1].[quantity]) > 5)`);
   });

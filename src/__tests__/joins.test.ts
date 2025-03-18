@@ -36,7 +36,7 @@ describe('Join Queries', () => {
 
     expect(sql).toEqual(`SELECT *
 FROM [users] AS [u]
-  INNER JOIN [orders] AS [o] ON ([u].[id] = [o].[userId])`);
+INNER JOIN [orders] AS [o] ON ([u].[id] = [o].[userId])`);
   });
 
   test('Join with column selection', () => {
@@ -56,7 +56,7 @@ FROM [users] AS [u]
     expect(sql).toEqual(`SELECT
   [u].[name] AS [userName], [o].[amount] AS [orderAmount]
 FROM [users] AS [u]
-  INNER JOIN [orders] AS [o] ON ([u].[id] = [o].[userId])`);
+INNER JOIN [orders] AS [o] ON ([u].[id] = [o].[userId])`);
   });
 
   test('Multiple joins', () => {
@@ -89,9 +89,9 @@ FROM [users] AS [u]
 
     expect(sql).toEqual(`SELECT *
 FROM [users] AS [u]
-  INNER JOIN [orders] AS [o] ON ([u].[id] = [o].[userId])
-  INNER JOIN [orderProducts] AS [o1] ON ([o].[id] = [o1].[orderId])
-  INNER JOIN [products] AS [p] ON ([o1].[productId] = [p].[id])`);
+INNER JOIN [orders] AS [o] ON ([u].[id] = [o].[userId])
+INNER JOIN [orderProducts] AS [o1] ON ([o].[id] = [o1].[orderId])
+INNER JOIN [products] AS [p] ON ([o1].[productId] = [p].[id])`);
   });
 
   test('Left join', () => {
@@ -106,7 +106,7 @@ FROM [users] AS [u]
 
     expect(sql).toEqual(`SELECT *
 FROM [users] AS [u]
-  LEFT OUTER JOIN [orders] AS [o] ON ([u].[id] = [o].[userId])`);
+LEFT OUTER JOIN [orders] AS [o] ON ([u].[id] = [o].[userId])`);
   });
 
   test('Join with nested property access', () => {
@@ -116,26 +116,20 @@ FROM [users] AS [u]
         user => user.id,
         order => order.userId,
         (user, order) => ({
-          userDetails: {
-            id: user.id,
-            name: user.name,
-          },
-          orderInfo: {
-            id: order.id,
-            amount: order.amount,
-          },
+          user: user,
+          order: order,
         }),
       )
       .select(joined => ({
-        userId: joined.userDetails.id,
-        userName: joined.userDetails.name,
-        orderAmount: joined.orderInfo.amount,
+        userId: joined.user.id,
+        userName: joined.user.name,
+        orderAmount: joined.order.amount,
       }));
     const sql = query.toQueryString();
 
-    expect(sql).toContain(`SELECT
+    expect(sql).toEqual(`SELECT
   [u].[id] AS [userId], [u].[name] AS [userName], [o].[amount] AS [orderAmount]
 FROM [users] AS [u]
-  INNER JOIN [orders] AS [o] ON ([u].[id] = [o].[userId])`);
+INNER JOIN [orders] AS [o] ON ([u].[id] = [o].[userId])`);
   });
 });

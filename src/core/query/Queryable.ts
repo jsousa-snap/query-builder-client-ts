@@ -2556,60 +2556,96 @@ export class Queryable<T> {
     return newQueryable;
   }
 
-  // Adicionar à classe Queryable
-
   /**
-   * Adiciona uma condição WHERE EXISTS com subconsulta
-   * @param subquery A subconsulta a ser usada na condição
+   * Adiciona uma condição WHERE NOT EXISTS com subconsulta correlacionada
+   * @param subquerySource DbSet fonte para a subconsulta
+   * @param parentSelector Seletor para a coluna da consulta pai
+   * @param subquerySelector Seletor para a coluna da subconsulta
+   * @param subqueryBuilder Função que modifica a subconsulta
    *
    * @example
-   * // Uso correto: sempre fornecer um select explícito
-   * users.whereExists(orders.where(o => o.userId === u.id).select(_ => 1))
+   * // Encontrar usuários que não possuem pedidos cancelados
+   * users.whereNotExists(
+   *   orders,
+   *   user => user.id,
+   *   order => order.userId,
+   *   query => query.where(o => o.status === 'canceled')
+   * )
+   *
+   * @example
+   * // Encontrar produtos que nunca foram vendidos com desconto
+   * products.whereNotExists(
+   *   orderItems,
+   *   product => product.id,
+   *   item => item.productId,
+   *   query => query.where(i => i.discount > 0)
+   * )
    */
-  whereExists<U>(subquery: Queryable<U>): Queryable<T> {
-    // Criar um novo queryable
+  whereNotExists<U = T>(
+    subquerySource: DbSet<U>,
+    parentSelector: (entity: T) => any,
+    subquerySelector: (entity: U) => any,
+    subqueryBuilder: (query: Queryable<U>) => Queryable<any>,
+  ): Queryable<T> {
+    // Criar um clone deste queryable
     const newQueryable = this.clone();
 
-    // Converter o Queryable em uma subconsulta
-    const selectExpr = subquery.toMetadata();
-    const subqueryExpr = this.expressionBuilder.createSubquery(selectExpr);
+    // Construir a consulta base
+    const subquery = subquerySource.query();
 
-    // Criar a expressão EXISTS
-    const existsExpr = this.expressionBuilder.createExistsSubquery(subqueryExpr);
+    // Usar o LambdaParser para analisar os seletores corretamente
+    const enhancedParser = new LambdaParser(
+      this.expressionBuilder,
+      this.contextVariables,
+      this.propertyTracker,
+    );
 
-    // Se já existe uma cláusula where, fazer um AND com a nova
-    if (newQueryable.whereClause) {
-      newQueryable.whereClause = this.expressionBuilder.createAnd(
-        newQueryable.whereClause,
-        existsExpr,
+    // Analisar o seletor da consulta pai
+    const parentColumn = enhancedParser.parseAggregationSelector<T>(parentSelector, this.alias);
+
+    // Analisar o seletor da subconsulta
+    const subqueryEnhancedParser = new LambdaParser(
+      subquery.expressionBuilder,
+      subquery.contextVariables,
+      subquery.propertyTracker,
+    );
+
+    const subqueryColumn = subqueryEnhancedParser.parseAggregationSelector<U>(
+      subquerySelector,
+      subquerySource.getAlias(),
+    );
+
+    // Criar a condição de correlação
+    const equalityExpr = subquery.expressionBuilder.createEqual(subqueryColumn, parentColumn);
+
+    // Atribuir diretamente à propriedade whereClause (em vez de chamar o método where)
+    const initialSubquery = subquery.clone();
+    if (initialSubquery.whereClause) {
+      initialSubquery.whereClause = initialSubquery.expressionBuilder.createAnd(
+        initialSubquery.whereClause,
+        equalityExpr,
       );
     } else {
-      newQueryable.whereClause = existsExpr;
+      initialSubquery.whereClause = equalityExpr;
     }
 
-    return newQueryable;
-  }
+    // Aplicar transformações adicionais
+    const transformedSubquery = subqueryBuilder(initialSubquery);
 
-  /**
-   * Adiciona uma condição WHERE NOT EXISTS com subconsulta
-   * @param subquery A subconsulta a ser usada na condição
-   *
-   * @example
-   * // Uso correto: sempre fornecer um select explícito
-   * users.whereNotExists(orders.where(o => o.status === 'canceled').select(_ => 1))
-   */
-  whereNotExists<U>(subquery: Queryable<U>): Queryable<T> {
-    // Criar um novo queryable
-    const newQueryable = this.clone();
+    // Garantir que a subconsulta tenha uma projeção
+    let finalSubquery = transformedSubquery;
+    if (transformedSubquery.projections.length === 0) {
+      finalSubquery = transformedSubquery.select(_ => 1);
+    }
 
-    // Converter o Queryable em uma subconsulta
-    const selectExpr = subquery.toMetadata();
+    // Converter a subconsulta em uma expressão
+    const selectExpr = finalSubquery.toMetadata();
     const subqueryExpr = this.expressionBuilder.createSubquery(selectExpr);
 
     // Criar a expressão NOT EXISTS
     const notExistsExpr = this.expressionBuilder.createNotExistsSubquery(subqueryExpr);
 
-    // Se já existe uma cláusula where, fazer um AND com a nova
+    // Adicionar à cláusula WHERE
     if (newQueryable.whereClause) {
       newQueryable.whereClause = this.expressionBuilder.createAnd(
         newQueryable.whereClause,
@@ -2617,6 +2653,110 @@ export class Queryable<T> {
       );
     } else {
       newQueryable.whereClause = notExistsExpr;
+    }
+
+    return newQueryable;
+  }
+
+  /**
+   * Adiciona uma condição WHERE EXISTS com subconsulta correlacionada
+   * @param subquerySource DbSet fonte para a subconsulta
+   * @param parentSelector Seletor para a coluna da consulta pai
+   * @param subquerySelector Seletor para a coluna da subconsulta
+   * @param subqueryBuilder Função que modifica a subconsulta
+   *
+   * @example
+   * // Encontrar usuários que têm pedidos com valor acima de 1000
+   * users.whereExists(
+   *   orders,
+   *   user => user.id,
+   *   order => order.userId,
+   *   query => query.where(o => o.amount > 1000)
+   * )
+   *
+   * @example
+   * // Encontrar departamentos que possuem pelo menos um funcionário com salário acima da média
+   * departments.whereExists(
+   *   employees,
+   *   dept => dept.id,
+   *   emp => emp.departmentId,
+   *   query => query.where(e => e.salary > query.subquery(
+   *     employees.select(e => ({ avgSalary: e.avg(e => e.salary) }))
+   *   ))
+   * )
+   */
+  whereExists<U = T>(
+    subquerySource: DbSet<U>,
+    parentSelector: (entity: T) => any,
+    subquerySelector: (entity: U) => any,
+    subqueryBuilder: (query: Queryable<U>) => Queryable<any>,
+  ): Queryable<T> {
+    // Criar um clone deste queryable
+    const newQueryable = this.clone();
+
+    // Construir a consulta base
+    const subquery = subquerySource.query();
+
+    // Usar o LambdaParser para analisar os seletores corretamente
+    const enhancedParser = new LambdaParser(
+      this.expressionBuilder,
+      this.contextVariables,
+      this.propertyTracker,
+    );
+
+    // Analisar o seletor da consulta pai
+    const parentColumn = enhancedParser.parseAggregationSelector<T>(parentSelector, this.alias);
+
+    // Analisar o seletor da subconsulta
+    const subqueryEnhancedParser = new LambdaParser(
+      subquery.expressionBuilder,
+      subquery.contextVariables,
+      subquery.propertyTracker,
+    );
+
+    const subqueryColumn = subqueryEnhancedParser.parseAggregationSelector<U>(
+      subquerySelector,
+      subquerySource.getAlias(),
+    );
+
+    // Criar a condição de correlação
+    const equalityExpr = subquery.expressionBuilder.createEqual(subqueryColumn, parentColumn);
+
+    // Atribuir diretamente à propriedade whereClause (em vez de chamar o método where)
+    const initialSubquery = subquery.clone();
+    if (initialSubquery.whereClause) {
+      initialSubquery.whereClause = initialSubquery.expressionBuilder.createAnd(
+        initialSubquery.whereClause,
+        equalityExpr,
+      );
+    } else {
+      initialSubquery.whereClause = equalityExpr;
+    }
+
+    // Aplicar transformações adicionais
+    const transformedSubquery = subqueryBuilder(initialSubquery);
+
+    // Garantir que a subconsulta tenha uma projeção
+    let finalSubquery = transformedSubquery;
+    if (transformedSubquery.projections.length === 0) {
+      finalSubquery = transformedSubquery.select(_ => 1);
+    }
+
+    // Converter a subconsulta em uma expressão
+    const selectExpr = finalSubquery.toMetadata();
+    const subqueryExpr = this.expressionBuilder.createSubquery(selectExpr);
+
+    // Criar a expressão EXISTS
+    const existsExpr = this.expressionBuilder.createExistsSubquery(subqueryExpr);
+
+    // Adicionar à cláusula WHERE
+    if (newQueryable.whereClause) {
+      newQueryable.whereClause = this.expressionBuilder.createAnd(
+        newQueryable.whereClause,
+        existsExpr,
+      );
+    } else {
+      newQueryable.whereClause = existsExpr;
     }
 
     return newQueryable;
@@ -2811,6 +2951,723 @@ export class Queryable<T> {
    */
   whereLessThanOrEqual<U>(selector: (entity: T) => any, subquery: Queryable<U>): Queryable<T> {
     return this.whereCompareSubquery(selector, ExpressionType.LessThanOrEqual, subquery);
+  }
+
+  /**
+   * Adiciona uma condição WHERE IN com subconsulta correlacionada
+   * @param subquerySource DbSet fonte para a subconsulta
+   * @param parentSelector Seletor para a coluna da consulta pai
+   * @param subquerySelector Seletor para a coluna da subconsulta
+   * @param subqueryBuilder Função que modifica a subconsulta
+   *
+   * @example
+   * // Encontrar usuários que fizeram pedidos acima de 1000
+   * users.whereInCorrelated(
+   *   orders,
+   *   user => user.id,
+   *   order => order.userId,
+   *   query => query.where(o => o.amount > 1000).select(o => o.userId)
+   * )
+   */
+  whereInCorrelated<U>(
+    subquerySource: DbSet<U>,
+    parentSelector: (entity: T) => any,
+    subquerySelector: (entity: U) => any,
+    subqueryBuilder: (query: Queryable<U>) => Queryable<any>,
+  ): Queryable<T> {
+    // Criar um clone deste queryable
+    const newQueryable = this.clone();
+
+    // Construir a consulta base
+    const subquery = subquerySource.query();
+
+    // Usar o LambdaParser para analisar os seletores
+    const enhancedParser = new LambdaParser(
+      this.expressionBuilder,
+      this.contextVariables,
+      this.propertyTracker,
+    );
+
+    // Analisar o seletor da consulta pai
+    const parentColumn = enhancedParser.parseAggregationSelector<T>(parentSelector, this.alias);
+
+    // Analisar o seletor da subconsulta
+    const subqueryEnhancedParser = new LambdaParser(
+      subquery.expressionBuilder,
+      subquery.contextVariables,
+      subquery.propertyTracker,
+    );
+
+    const subqueryColumn = subqueryEnhancedParser.parseAggregationSelector<U>(
+      subquerySelector,
+      subquerySource.getAlias(),
+    );
+
+    // Criar a condição de correlação
+    const equalityExpr = subquery.expressionBuilder.createEqual(subqueryColumn, parentColumn);
+
+    // Atribuir diretamente à propriedade whereClause
+    const initialSubquery = subquery.clone();
+    if (initialSubquery.whereClause) {
+      initialSubquery.whereClause = initialSubquery.expressionBuilder.createAnd(
+        initialSubquery.whereClause,
+        equalityExpr,
+      );
+    } else {
+      initialSubquery.whereClause = equalityExpr;
+    }
+
+    // Aplicar transformações adicionais
+    const transformedSubquery = subqueryBuilder(initialSubquery);
+
+    // Converter a subconsulta em uma expressão
+    const selectExpr = transformedSubquery.toMetadata();
+    const subqueryExpr = this.expressionBuilder.createSubquery(selectExpr);
+
+    // Criar a expressão IN
+    const inExpr = this.expressionBuilder.createInSubquery(parentColumn, subqueryExpr);
+
+    // Adicionar à cláusula WHERE
+    if (newQueryable.whereClause) {
+      newQueryable.whereClause = this.expressionBuilder.createAnd(newQueryable.whereClause, inExpr);
+    } else {
+      newQueryable.whereClause = inExpr;
+    }
+
+    return newQueryable;
+  }
+
+  /**
+   * Adiciona uma condição WHERE NOT IN com subconsulta correlacionada
+   * @param subquerySource DbSet fonte para a subconsulta
+   * @param parentSelector Seletor para a coluna da consulta pai
+   * @param subquerySelector Seletor para a coluna da subconsulta
+   * @param subqueryBuilder Função que modifica a subconsulta
+   *
+   * @example
+   * // Encontrar usuários que não fizeram pedidos cancelados
+   * users.whereNotInCorrelated(
+   *   orders,
+   *   user => user.id,
+   *   order => order.userId,
+   *   query => query.where(o => o.status === 'canceled').select(o => o.userId)
+   * )
+   */
+  whereNotInCorrelated<U>(
+    subquerySource: DbSet<U>,
+    parentSelector: (entity: T) => any,
+    subquerySelector: (entity: U) => any,
+    subqueryBuilder: (query: Queryable<U>) => Queryable<any>,
+  ): Queryable<T> {
+    // Criar um clone deste queryable
+    const newQueryable = this.clone();
+
+    // Construir a consulta base
+    const subquery = subquerySource.query();
+
+    // Usar o LambdaParser para analisar os seletores
+    const enhancedParser = new LambdaParser(
+      this.expressionBuilder,
+      this.contextVariables,
+      this.propertyTracker,
+    );
+
+    // Analisar o seletor da consulta pai
+    const parentColumn = enhancedParser.parseAggregationSelector<T>(parentSelector, this.alias);
+
+    // Analisar o seletor da subconsulta
+    const subqueryEnhancedParser = new LambdaParser(
+      subquery.expressionBuilder,
+      subquery.contextVariables,
+      subquery.propertyTracker,
+    );
+
+    const subqueryColumn = subqueryEnhancedParser.parseAggregationSelector<U>(
+      subquerySelector,
+      subquerySource.getAlias(),
+    );
+
+    // Criar a condição de correlação
+    const equalityExpr = subquery.expressionBuilder.createEqual(subqueryColumn, parentColumn);
+
+    // Atribuir diretamente à propriedade whereClause
+    const initialSubquery = subquery.clone();
+    if (initialSubquery.whereClause) {
+      initialSubquery.whereClause = initialSubquery.expressionBuilder.createAnd(
+        initialSubquery.whereClause,
+        equalityExpr,
+      );
+    } else {
+      initialSubquery.whereClause = equalityExpr;
+    }
+
+    // Aplicar transformações adicionais
+    const transformedSubquery = subqueryBuilder(initialSubquery);
+
+    // Converter a subconsulta em uma expressão
+    const selectExpr = transformedSubquery.toMetadata();
+    const subqueryExpr = this.expressionBuilder.createSubquery(selectExpr);
+
+    // Criar a expressão NOT IN
+    const notInExpr = this.expressionBuilder.createNotInSubquery(parentColumn, subqueryExpr);
+
+    // Adicionar à cláusula WHERE
+    if (newQueryable.whereClause) {
+      newQueryable.whereClause = this.expressionBuilder.createAnd(
+        newQueryable.whereClause,
+        notInExpr,
+      );
+    } else {
+      newQueryable.whereClause = notInExpr;
+    }
+
+    return newQueryable;
+  }
+
+  /**
+   * Adiciona uma condição WHERE = com subconsulta correlacionada
+   * @param subquerySource DbSet fonte para a subconsulta
+   * @param parentSelector Seletor para a coluna da consulta pai
+   * @param subquerySelector Seletor para a coluna da subconsulta
+   * @param subqueryBuilder Função que modifica a subconsulta
+   *
+   * @example
+   * // Encontrar funcionários com salário igual à média do departamento
+   * employees.whereEqualCorrelated(
+   *   departments,
+   *   emp => emp.departmentId,
+   *   dept => dept.id,
+   *   query => query.select(d => ({ avgSalary: d.avg(d => d.salary) }))
+   * )
+   */
+  whereEqualCorrelated<U>(
+    subquerySource: DbSet<U>,
+    parentSelector: (entity: T) => any,
+    subquerySelector: (entity: U) => any,
+    subqueryBuilder: (query: Queryable<U>) => Queryable<any>,
+  ): Queryable<T> {
+    // Criar um clone deste queryable
+    const newQueryable = this.clone();
+
+    // Construir a consulta base
+    const subquery = subquerySource.query();
+
+    // Usar o LambdaParser para analisar os seletores
+    const enhancedParser = new LambdaParser(
+      this.expressionBuilder,
+      this.contextVariables,
+      this.propertyTracker,
+    );
+
+    // Analisar o seletor da consulta pai
+    const parentColumn = enhancedParser.parseAggregationSelector<T>(parentSelector, this.alias);
+
+    // Analisar o seletor da subconsulta
+    const subqueryEnhancedParser = new LambdaParser(
+      subquery.expressionBuilder,
+      subquery.contextVariables,
+      subquery.propertyTracker,
+    );
+
+    const subqueryColumn = subqueryEnhancedParser.parseAggregationSelector<U>(
+      subquerySelector,
+      subquerySource.getAlias(),
+    );
+
+    // Criar a condição de correlação
+    const equalityExpr = subquery.expressionBuilder.createEqual(subqueryColumn, parentColumn);
+
+    // Atribuir diretamente à propriedade whereClause
+    const initialSubquery = subquery.clone();
+    if (initialSubquery.whereClause) {
+      initialSubquery.whereClause = initialSubquery.expressionBuilder.createAnd(
+        initialSubquery.whereClause,
+        equalityExpr,
+      );
+    } else {
+      initialSubquery.whereClause = equalityExpr;
+    }
+
+    // Aplicar transformações adicionais
+    const transformedSubquery = subqueryBuilder(initialSubquery);
+
+    // Converter a subconsulta em uma expressão
+    const selectExpr = transformedSubquery.toMetadata();
+    const subqueryExpr = this.expressionBuilder.createSubquery(selectExpr);
+
+    // Criar a expressão EQUAL
+    const compareExpr = this.expressionBuilder.createBinary(
+      ExpressionType.Equal,
+      parentColumn,
+      subqueryExpr,
+    );
+
+    // Adicionar à cláusula WHERE
+    if (newQueryable.whereClause) {
+      newQueryable.whereClause = this.expressionBuilder.createAnd(
+        newQueryable.whereClause,
+        compareExpr,
+      );
+    } else {
+      newQueryable.whereClause = compareExpr;
+    }
+
+    return newQueryable;
+  }
+
+  /**
+   * Adiciona uma condição WHERE != com subconsulta correlacionada
+   * @param subquerySource DbSet fonte para a subconsulta
+   * @param parentSelector Seletor para a coluna da consulta pai
+   * @param subquerySelector Seletor para a coluna da subconsulta
+   * @param subqueryBuilder Função que modifica a subconsulta
+   *
+   * @example
+   * // Encontrar funcionários com salário diferente da média do departamento
+   * employees.whereNotEqualCorrelated(
+   *   departments,
+   *   emp => emp.departmentId,
+   *   dept => dept.id,
+   *   query => query.select(d => ({ avgSalary: d.avg(d => d.salary) }))
+   * )
+   */
+  whereNotEqualCorrelated<U>(
+    subquerySource: DbSet<U>,
+    parentSelector: (entity: T) => any,
+    subquerySelector: (entity: U) => any,
+    subqueryBuilder: (query: Queryable<U>) => Queryable<any>,
+  ): Queryable<T> {
+    // Criar um clone deste queryable
+    const newQueryable = this.clone();
+
+    // Construir a consulta base
+    const subquery = subquerySource.query();
+
+    // Usar o LambdaParser para analisar os seletores
+    const enhancedParser = new LambdaParser(
+      this.expressionBuilder,
+      this.contextVariables,
+      this.propertyTracker,
+    );
+
+    // Analisar o seletor da consulta pai
+    const parentColumn = enhancedParser.parseAggregationSelector<T>(parentSelector, this.alias);
+
+    // Analisar o seletor da subconsulta
+    const subqueryEnhancedParser = new LambdaParser(
+      subquery.expressionBuilder,
+      subquery.contextVariables,
+      subquery.propertyTracker,
+    );
+
+    const subqueryColumn = subqueryEnhancedParser.parseAggregationSelector<U>(
+      subquerySelector,
+      subquerySource.getAlias(),
+    );
+
+    // Criar a condição de correlação
+    const equalityExpr = subquery.expressionBuilder.createEqual(subqueryColumn, parentColumn);
+
+    // Atribuir diretamente à propriedade whereClause
+    const initialSubquery = subquery.clone();
+    if (initialSubquery.whereClause) {
+      initialSubquery.whereClause = initialSubquery.expressionBuilder.createAnd(
+        initialSubquery.whereClause,
+        equalityExpr,
+      );
+    } else {
+      initialSubquery.whereClause = equalityExpr;
+    }
+
+    // Aplicar transformações adicionais
+    const transformedSubquery = subqueryBuilder(initialSubquery);
+
+    // Converter a subconsulta em uma expressão
+    const selectExpr = transformedSubquery.toMetadata();
+    const subqueryExpr = this.expressionBuilder.createSubquery(selectExpr);
+
+    // Criar a expressão NOT EQUAL
+    const compareExpr = this.expressionBuilder.createBinary(
+      ExpressionType.NotEqual,
+      parentColumn,
+      subqueryExpr,
+    );
+
+    // Adicionar à cláusula WHERE
+    if (newQueryable.whereClause) {
+      newQueryable.whereClause = this.expressionBuilder.createAnd(
+        newQueryable.whereClause,
+        compareExpr,
+      );
+    } else {
+      newQueryable.whereClause = compareExpr;
+    }
+
+    return newQueryable;
+  }
+
+  /**
+   * Adiciona uma condição WHERE > com subconsulta correlacionada
+   * @param subquerySource DbSet fonte para a subconsulta
+   * @param parentSelector Seletor para a coluna da consulta pai
+   * @param subquerySelector Seletor para a coluna da subconsulta
+   * @param subqueryBuilder Função que modifica a subconsulta
+   *
+   * @example
+   * // Encontrar funcionários com salário acima da média do departamento
+   * employees.whereGreaterThanCorrelated(
+   *   departments,
+   *   emp => emp.departmentId,
+   *   dept => dept.id,
+   *   query => query.select(d => ({ avgSalary: d.avg(d => d.salary) }))
+   * )
+   */
+  whereGreaterThanCorrelated<U>(
+    subquerySource: DbSet<U>,
+    parentSelector: (entity: T) => any,
+    subquerySelector: (entity: U) => any,
+    subqueryBuilder: (query: Queryable<U>) => Queryable<any>,
+  ): Queryable<T> {
+    // Criar um clone deste queryable
+    const newQueryable = this.clone();
+
+    // Construir a consulta base
+    const subquery = subquerySource.query();
+
+    // Usar o LambdaParser para analisar os seletores
+    const enhancedParser = new LambdaParser(
+      this.expressionBuilder,
+      this.contextVariables,
+      this.propertyTracker,
+    );
+
+    // Analisar o seletor da consulta pai
+    const parentColumn = enhancedParser.parseAggregationSelector<T>(parentSelector, this.alias);
+
+    // Analisar o seletor da subconsulta
+    const subqueryEnhancedParser = new LambdaParser(
+      subquery.expressionBuilder,
+      subquery.contextVariables,
+      subquery.propertyTracker,
+    );
+
+    const subqueryColumn = subqueryEnhancedParser.parseAggregationSelector<U>(
+      subquerySelector,
+      subquerySource.getAlias(),
+    );
+
+    // Criar a condição de correlação
+    const equalityExpr = subquery.expressionBuilder.createEqual(subqueryColumn, parentColumn);
+
+    // Atribuir diretamente à propriedade whereClause
+    const initialSubquery = subquery.clone();
+    if (initialSubquery.whereClause) {
+      initialSubquery.whereClause = initialSubquery.expressionBuilder.createAnd(
+        initialSubquery.whereClause,
+        equalityExpr,
+      );
+    } else {
+      initialSubquery.whereClause = equalityExpr;
+    }
+
+    // Aplicar transformações adicionais
+    const transformedSubquery = subqueryBuilder(initialSubquery);
+
+    // Converter a subconsulta em uma expressão
+    const selectExpr = transformedSubquery.toMetadata();
+    const subqueryExpr = this.expressionBuilder.createSubquery(selectExpr);
+
+    // Criar a expressão GREATER THAN
+    const compareExpr = this.expressionBuilder.createBinary(
+      ExpressionType.GreaterThan,
+      parentColumn,
+      subqueryExpr,
+    );
+
+    // Adicionar à cláusula WHERE
+    if (newQueryable.whereClause) {
+      newQueryable.whereClause = this.expressionBuilder.createAnd(
+        newQueryable.whereClause,
+        compareExpr,
+      );
+    } else {
+      newQueryable.whereClause = compareExpr;
+    }
+
+    return newQueryable;
+  }
+
+  /**
+   * Adiciona uma condição WHERE >= com subconsulta correlacionada
+   * @param subquerySource DbSet fonte para a subconsulta
+   * @param parentSelector Seletor para a coluna da consulta pai
+   * @param subquerySelector Seletor para a coluna da subconsulta
+   * @param subqueryBuilder Função que modifica a subconsulta
+   *
+   * @example
+   * // Encontrar funcionários com salário maior ou igual à média do departamento
+   * employees.whereGreaterThanOrEqualCorrelated(
+   *   departments,
+   *   emp => emp.departmentId,
+   *   dept => dept.id,
+   *   query => query.select(d => ({ avgSalary: d.avg(d => d.salary) }))
+   * )
+   */
+  whereGreaterThanOrEqualCorrelated<U>(
+    subquerySource: DbSet<U>,
+    parentSelector: (entity: T) => any,
+    subquerySelector: (entity: U) => any,
+    subqueryBuilder: (query: Queryable<U>) => Queryable<any>,
+  ): Queryable<T> {
+    // Criar um clone deste queryable
+    const newQueryable = this.clone();
+
+    // Construir a consulta base
+    const subquery = subquerySource.query();
+
+    // Usar o LambdaParser para analisar os seletores
+    const enhancedParser = new LambdaParser(
+      this.expressionBuilder,
+      this.contextVariables,
+      this.propertyTracker,
+    );
+
+    // Analisar o seletor da consulta pai
+    const parentColumn = enhancedParser.parseAggregationSelector<T>(parentSelector, this.alias);
+
+    // Analisar o seletor da subconsulta
+    const subqueryEnhancedParser = new LambdaParser(
+      subquery.expressionBuilder,
+      subquery.contextVariables,
+      subquery.propertyTracker,
+    );
+
+    const subqueryColumn = subqueryEnhancedParser.parseAggregationSelector<U>(
+      subquerySelector,
+      subquerySource.getAlias(),
+    );
+
+    // Criar a condição de correlação
+    const equalityExpr = subquery.expressionBuilder.createEqual(subqueryColumn, parentColumn);
+
+    // Atribuir diretamente à propriedade whereClause
+    const initialSubquery = subquery.clone();
+    if (initialSubquery.whereClause) {
+      initialSubquery.whereClause = initialSubquery.expressionBuilder.createAnd(
+        initialSubquery.whereClause,
+        equalityExpr,
+      );
+    } else {
+      initialSubquery.whereClause = equalityExpr;
+    }
+
+    // Aplicar transformações adicionais
+    const transformedSubquery = subqueryBuilder(initialSubquery);
+
+    // Converter a subconsulta em uma expressão
+    const selectExpr = transformedSubquery.toMetadata();
+    const subqueryExpr = this.expressionBuilder.createSubquery(selectExpr);
+
+    // Criar a expressão GREATER THAN OR EQUAL
+    const compareExpr = this.expressionBuilder.createBinary(
+      ExpressionType.GreaterThanOrEqual,
+      parentColumn,
+      subqueryExpr,
+    );
+
+    // Adicionar à cláusula WHERE
+    if (newQueryable.whereClause) {
+      newQueryable.whereClause = this.expressionBuilder.createAnd(
+        newQueryable.whereClause,
+        compareExpr,
+      );
+    } else {
+      newQueryable.whereClause = compareExpr;
+    }
+
+    return newQueryable;
+  }
+
+  /**
+   * Adiciona uma condição WHERE < com subconsulta correlacionada
+   * @param subquerySource DbSet fonte para a subconsulta
+   * @param parentSelector Seletor para a coluna da consulta pai
+   * @param subquerySelector Seletor para a coluna da subconsulta
+   * @param subqueryBuilder Função que modifica a subconsulta
+   *
+   * @example
+   * // Encontrar funcionários com salário abaixo da média do departamento
+   * employees.whereLessThanCorrelated(
+   *   departments,
+   *   emp => emp.departmentId,
+   *   dept => dept.id,
+   *   query => query.select(d => ({ avgSalary: d.avg(d => d.salary) }))
+   * )
+   */
+  whereLessThanCorrelated<U>(
+    subquerySource: DbSet<U>,
+    parentSelector: (entity: T) => any,
+    subquerySelector: (entity: U) => any,
+    subqueryBuilder: (query: Queryable<U>) => Queryable<any>,
+  ): Queryable<T> {
+    // Criar um clone deste queryable
+    const newQueryable = this.clone();
+
+    // Construir a consulta base
+    const subquery = subquerySource.query();
+
+    // Usar o LambdaParser para analisar os seletores
+    const enhancedParser = new LambdaParser(
+      this.expressionBuilder,
+      this.contextVariables,
+      this.propertyTracker,
+    );
+
+    // Analisar o seletor da consulta pai
+    const parentColumn = enhancedParser.parseAggregationSelector<T>(parentSelector, this.alias);
+
+    // Analisar o seletor da subconsulta
+    const subqueryEnhancedParser = new LambdaParser(
+      subquery.expressionBuilder,
+      subquery.contextVariables,
+      subquery.propertyTracker,
+    );
+
+    const subqueryColumn = subqueryEnhancedParser.parseAggregationSelector<U>(
+      subquerySelector,
+      subquerySource.getAlias(),
+    );
+
+    // Criar a condição de correlação
+    const equalityExpr = subquery.expressionBuilder.createEqual(subqueryColumn, parentColumn);
+
+    // Atribuir diretamente à propriedade whereClause
+    const initialSubquery = subquery.clone();
+    if (initialSubquery.whereClause) {
+      initialSubquery.whereClause = initialSubquery.expressionBuilder.createAnd(
+        initialSubquery.whereClause,
+        equalityExpr,
+      );
+    } else {
+      initialSubquery.whereClause = equalityExpr;
+    }
+
+    // Aplicar transformações adicionais
+    const transformedSubquery = subqueryBuilder(initialSubquery);
+
+    // Converter a subconsulta em uma expressão
+    const selectExpr = transformedSubquery.toMetadata();
+    const subqueryExpr = this.expressionBuilder.createSubquery(selectExpr);
+
+    // Criar a expressão LESS THAN
+    const compareExpr = this.expressionBuilder.createBinary(
+      ExpressionType.LessThan,
+      parentColumn,
+      subqueryExpr,
+    );
+
+    // Adicionar à cláusula WHERE
+    if (newQueryable.whereClause) {
+      newQueryable.whereClause = this.expressionBuilder.createAnd(
+        newQueryable.whereClause,
+        compareExpr,
+      );
+    } else {
+      newQueryable.whereClause = compareExpr;
+    }
+
+    return newQueryable;
+  }
+
+  /**
+   * Adiciona uma condição WHERE <= com subconsulta correlacionada
+   * @param subquerySource DbSet fonte para a subconsulta
+   * @param parentSelector Seletor para a coluna da consulta pai
+   * @param subquerySelector Seletor para a coluna da subconsulta
+   * @param subqueryBuilder Função que modifica a subconsulta
+   *
+   * @example
+   * // Encontrar funcionários com salário menor ou igual à média do departamento
+   * employees.whereLessThanOrEqualCorrelated(
+   *   departments,
+   *   emp => emp.departmentId,
+   *   dept => dept.id,
+   *   query => query.select(d => ({ avgSalary: d.avg(d => d.salary) }))
+   * )
+   */
+  whereLessThanOrEqualCorrelated<U>(
+    subquerySource: DbSet<U>,
+    parentSelector: (entity: T) => any,
+    subquerySelector: (entity: U) => any,
+    subqueryBuilder: (query: Queryable<U>) => Queryable<any>,
+  ): Queryable<T> {
+    // Criar um clone deste queryable
+    const newQueryable = this.clone();
+
+    // Construir a consulta base
+    const subquery = subquerySource.query();
+
+    // Usar o LambdaParser para analisar os seletores
+    const enhancedParser = new LambdaParser(
+      this.expressionBuilder,
+      this.contextVariables,
+      this.propertyTracker,
+    );
+
+    // Analisar o seletor da consulta pai
+    const parentColumn = enhancedParser.parseAggregationSelector<T>(parentSelector, this.alias);
+
+    // Analisar o seletor da subconsulta
+    const subqueryEnhancedParser = new LambdaParser(
+      subquery.expressionBuilder,
+      subquery.contextVariables,
+      subquery.propertyTracker,
+    );
+
+    const subqueryColumn = subqueryEnhancedParser.parseAggregationSelector<U>(
+      subquerySelector,
+      subquerySource.getAlias(),
+    );
+
+    // Criar a condição de correlação
+    const equalityExpr = subquery.expressionBuilder.createEqual(subqueryColumn, parentColumn);
+
+    // Atribuir diretamente à propriedade whereClause
+    const initialSubquery = subquery.clone();
+    if (initialSubquery.whereClause) {
+      initialSubquery.whereClause = initialSubquery.expressionBuilder.createAnd(
+        initialSubquery.whereClause,
+        equalityExpr,
+      );
+    } else {
+      initialSubquery.whereClause = equalityExpr;
+    }
+
+    // Aplicar transformações adicionais
+    const transformedSubquery = subqueryBuilder(initialSubquery);
+
+    // Converter a subconsulta em uma expressão
+    const selectExpr = transformedSubquery.toMetadata();
+    const subqueryExpr = this.expressionBuilder.createSubquery(selectExpr);
+
+    // Criar a expressão LESS THAN OR EQUAL
+    const compareExpr = this.expressionBuilder.createBinary(
+      ExpressionType.LessThanOrEqual,
+      parentColumn,
+      subqueryExpr,
+    );
+
+    // Adicionar à cláusula WHERE
+    if (newQueryable.whereClause) {
+      newQueryable.whereClause = this.expressionBuilder.createAnd(
+        newQueryable.whereClause,
+        compareExpr,
+      );
+    } else {
+      newQueryable.whereClause = compareExpr;
+    }
+
+    return newQueryable;
   }
 
   async toListAsync(): Promise<Record<string, any>[]> {

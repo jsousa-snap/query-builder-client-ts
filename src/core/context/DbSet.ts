@@ -286,21 +286,64 @@ export class DbSet<T> {
   }
 
   /**
-   * Adiciona uma condição WHERE EXISTS com subconsulta
-   * @param subquery A subconsulta a ser usada na condição
+   * Adiciona uma condição WHERE NOT EXISTS com subconsulta correlacionada
+   * @param subquerySource DbSet fonte para a subconsulta
+   * @param parentSelector Seletor para a coluna da consulta pai
+   * @param subquerySelector Seletor para a coluna da subconsulta
+   * @param subqueryBuilder Função que modifica a subconsulta
+   *
+   * @example
+   * // Encontrar usuários que não possuem pedidos cancelados
+   * users.whereNotExists(
+   *   orders,
+   *   user => user.id,
+   *   order => order.userId,
+   *   query => query.where(o => o.status === 'canceled')
+   * )
    */
-  whereExists<U>(subquery: Queryable<U>): Queryable<T> {
-    return this.query().whereExists(subquery);
+  whereNotExists<U>(
+    subquerySource: DbSet<U>,
+    parentSelector: (entity: T) => any,
+    subquerySelector: (entity: U) => any,
+    subqueryBuilder: (query: Queryable<U>) => Queryable<any>,
+  ): Queryable<T> {
+    return this.query().whereNotExists(
+      subquerySource,
+      parentSelector,
+      subquerySelector,
+      subqueryBuilder,
+    );
   }
 
   /**
-   * Adiciona uma condição WHERE NOT EXISTS com subconsulta
-   * @param subquery A subconsulta a ser usada na condição
+   * Adiciona uma condição WHERE EXISTS com subconsulta correlacionada
+   * @param subquerySource DbSet fonte para a subconsulta
+   * @param parentSelector Seletor para a coluna da consulta pai
+   * @param subquerySelector Seletor para a coluna da subconsulta
+   * @param subqueryBuilder Função que modifica a subconsulta
+   *
+   * @example
+   * // Encontrar usuários que têm pedidos com valor acima de 1000
+   * users.whereExists(
+   *   orders,
+   *   user => user.id,
+   *   order => order.userId,
+   *   query => query.where(o => o.amount > 1000)
+   * )
    */
-  whereNotExists<U>(subquery: Queryable<U>): Queryable<T> {
-    return this.query().whereNotExists(subquery);
+  whereExists<U>(
+    subquerySource: DbSet<U>,
+    parentSelector: (entity: T) => any,
+    subquerySelector: (entity: U) => any,
+    subqueryBuilder: (query: Queryable<U>) => Queryable<any>,
+  ): Queryable<T> {
+    return this.query().whereExists(
+      subquerySource,
+      parentSelector,
+      subquerySelector,
+      subqueryBuilder,
+    );
   }
-
   /**
    * Adiciona uma condição WHERE comparando com resultado de subconsulta
    * @param selector Função para selecionar o campo a ser comparado
@@ -367,6 +410,174 @@ export class DbSet<T> {
    */
   whereLessThanOrEqual<U>(selector: (entity: T) => any, subquery: Queryable<U>): Queryable<T> {
     return this.query().whereLessThanOrEqual(selector, subquery);
+  }
+
+  /**
+   * Adiciona uma condição WHERE IN com subconsulta correlacionada
+   * @param subquerySource DbSet fonte para a subconsulta
+   * @param parentSelector Seletor para a coluna da consulta pai
+   * @param subquerySelector Seletor para a coluna da subconsulta
+   * @param subqueryBuilder Função que modifica a subconsulta
+   */
+  whereInCorrelated<U>(
+    subquerySource: DbSet<U>,
+    parentSelector: (entity: T) => any,
+    subquerySelector: (entity: U) => any,
+    subqueryBuilder: (query: Queryable<U>) => Queryable<any>,
+  ): Queryable<T> {
+    return this.query().whereInCorrelated(
+      subquerySource,
+      parentSelector,
+      subquerySelector,
+      subqueryBuilder,
+    );
+  }
+
+  /**
+   * Adiciona uma condição WHERE NOT IN com subconsulta correlacionada
+   * @param subquerySource DbSet fonte para a subconsulta
+   * @param parentSelector Seletor para a coluna da consulta pai
+   * @param subquerySelector Seletor para a coluna da subconsulta
+   * @param subqueryBuilder Função que modifica a subconsulta
+   */
+  whereNotInCorrelated<U>(
+    subquerySource: DbSet<U>,
+    parentSelector: (entity: T) => any,
+    subquerySelector: (entity: U) => any,
+    subqueryBuilder: (query: Queryable<U>) => Queryable<any>,
+  ): Queryable<T> {
+    return this.query().whereNotInCorrelated(
+      subquerySource,
+      parentSelector,
+      subquerySelector,
+      subqueryBuilder,
+    );
+  }
+
+  /**
+   * Adiciona uma condição WHERE = com subconsulta correlacionada
+   * @param subquerySource DbSet fonte para a subconsulta
+   * @param parentSelector Seletor para a coluna da consulta pai
+   * @param subquerySelector Seletor para a coluna da subconsulta
+   * @param subqueryBuilder Função que modifica a subconsulta
+   */
+  whereEqualCorrelated<U>(
+    subquerySource: DbSet<U>,
+    parentSelector: (entity: T) => any,
+    subquerySelector: (entity: U) => any,
+    subqueryBuilder: (query: Queryable<U>) => Queryable<any>,
+  ): Queryable<T> {
+    return this.query().whereEqualCorrelated(
+      subquerySource,
+      parentSelector,
+      subquerySelector,
+      subqueryBuilder,
+    );
+  }
+
+  /**
+   * Adiciona uma condição WHERE != com subconsulta correlacionada
+   * @param subquerySource DbSet fonte para a subconsulta
+   * @param parentSelector Seletor para a coluna da consulta pai
+   * @param subquerySelector Seletor para a coluna da subconsulta
+   * @param subqueryBuilder Função que modifica a subconsulta
+   */
+  whereNotEqualCorrelated<U>(
+    subquerySource: DbSet<U>,
+    parentSelector: (entity: T) => any,
+    subquerySelector: (entity: U) => any,
+    subqueryBuilder: (query: Queryable<U>) => Queryable<any>,
+  ): Queryable<T> {
+    return this.query().whereNotEqualCorrelated(
+      subquerySource,
+      parentSelector,
+      subquerySelector,
+      subqueryBuilder,
+    );
+  }
+
+  /**
+   * Adiciona uma condição WHERE > com subconsulta correlacionada
+   * @param subquerySource DbSet fonte para a subconsulta
+   * @param parentSelector Seletor para a coluna da consulta pai
+   * @param subquerySelector Seletor para a coluna da subconsulta
+   * @param subqueryBuilder Função que modifica a subconsulta
+   */
+  whereGreaterThanCorrelated<U>(
+    subquerySource: DbSet<U>,
+    parentSelector: (entity: T) => any,
+    subquerySelector: (entity: U) => any,
+    subqueryBuilder: (query: Queryable<U>) => Queryable<any>,
+  ): Queryable<T> {
+    return this.query().whereGreaterThanCorrelated(
+      subquerySource,
+      parentSelector,
+      subquerySelector,
+      subqueryBuilder,
+    );
+  }
+
+  /**
+   * Adiciona uma condição WHERE >= com subconsulta correlacionada
+   * @param subquerySource DbSet fonte para a subconsulta
+   * @param parentSelector Seletor para a coluna da consulta pai
+   * @param subquerySelector Seletor para a coluna da subconsulta
+   * @param subqueryBuilder Função que modifica a subconsulta
+   */
+  whereGreaterThanOrEqualCorrelated<U>(
+    subquerySource: DbSet<U>,
+    parentSelector: (entity: T) => any,
+    subquerySelector: (entity: U) => any,
+    subqueryBuilder: (query: Queryable<U>) => Queryable<any>,
+  ): Queryable<T> {
+    return this.query().whereGreaterThanOrEqualCorrelated(
+      subquerySource,
+      parentSelector,
+      subquerySelector,
+      subqueryBuilder,
+    );
+  }
+
+  /**
+   * Adiciona uma condição WHERE < com subconsulta correlacionada
+   * @param subquerySource DbSet fonte para a subconsulta
+   * @param parentSelector Seletor para a coluna da consulta pai
+   * @param subquerySelector Seletor para a coluna da subconsulta
+   * @param subqueryBuilder Função que modifica a subconsulta
+   */
+  whereLessThanCorrelated<U>(
+    subquerySource: DbSet<U>,
+    parentSelector: (entity: T) => any,
+    subquerySelector: (entity: U) => any,
+    subqueryBuilder: (query: Queryable<U>) => Queryable<any>,
+  ): Queryable<T> {
+    return this.query().whereLessThanCorrelated(
+      subquerySource,
+      parentSelector,
+      subquerySelector,
+      subqueryBuilder,
+    );
+  }
+
+  /**
+   * Adiciona uma condição WHERE <= com subconsulta correlacionada
+   * @param subquerySource DbSet fonte para a subconsulta
+   * @param parentSelector Seletor para a coluna da consulta pai
+   * @param subquerySelector Seletor para a coluna da subconsulta
+   * @param subqueryBuilder Função que modifica a subconsulta
+   */
+  whereLessThanOrEqualCorrelated<U>(
+    subquerySource: DbSet<U>,
+    parentSelector: (entity: T) => any,
+    subquerySelector: (entity: U) => any,
+    subqueryBuilder: (query: Queryable<U>) => Queryable<any>,
+  ): Queryable<T> {
+    return this.query().whereLessThanOrEqualCorrelated(
+      subquerySource,
+      parentSelector,
+      subquerySelector,
+      subqueryBuilder,
+    );
   }
 
   /**

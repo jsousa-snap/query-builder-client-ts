@@ -53,7 +53,14 @@ describe('Query Builder - Subquery WHERE Tests', () => {
       .toQueryString();
 
     // Assert
-    expect(query).toEqual(``);
+    expect(query).toEqual(`SELECT
+  [u].[name]
+FROM [users] AS [u]
+WHERE [u].[id] IN (
+  (SELECT
+    [o].[userId] AS [userId]
+    FROM [orders] AS [o]
+    WHERE ([o].[status] = N'completed')))`);
   });
 
   test('WHERE NOT IN com subconsulta', () => {
@@ -70,7 +77,13 @@ describe('Query Builder - Subquery WHERE Tests', () => {
       .toQueryString();
 
     // Assert
-    expect(query).toEqual(``);
+    expect(query).toEqual(`SELECT *
+FROM [users] AS [u]
+WHERE [u].[id] NOT IN (
+  (SELECT
+    [o].[userId] AS [userId]
+    FROM [orders] AS [o]
+    WHERE ([o].[status] = N'canceled')))`);
   });
 
   test('WHERE EXISTS com subconsulta', () => {
@@ -80,11 +93,22 @@ describe('Query Builder - Subquery WHERE Tests', () => {
 
     // Act
     const sql = users
-      .whereExists(orders.where(o => o.status === 'completed').select(_ => 1))
+      .whereExists(
+        orders,
+        user => user.id,
+        order => order.userId,
+        query => query.where(o => o.status === 'completed').select(_ => 1),
+      )
       .toQueryString();
 
     // Assert
-    expect(sql).toEqual(``);
+    expect(sql).toEqual(`SELECT *
+FROM [users] AS [u]
+WHERE EXISTS (
+  (SELECT
+    1
+    FROM [orders] AS [o]
+    WHERE (([o].[userId] = [u].[id]) AND ([o].[status] = N'completed'))))`);
   });
 
   test('WHERE NOT EXISTS com subconsulta', () => {
@@ -94,11 +118,22 @@ describe('Query Builder - Subquery WHERE Tests', () => {
 
     // Act
     const sql = users
-      .whereNotExists(orders.where(o => o.status === 'canceled').select(_ => 1))
+      .whereNotExists(
+        orders,
+        user => user.id,
+        order => order.userId,
+        query => query.where(o => o.status === 'canceled').select(_ => 1),
+      )
       .toQueryString();
 
     // Assert
-    expect(sql).toEqual(``);
+    expect(sql).toEqual(`SELECT *
+FROM [users] AS [u]
+WHERE NOT EXISTS (
+  (SELECT
+    1
+    FROM [orders] AS [o]
+    WHERE (([o].[userId] = [u].[id]) AND ([o].[status] = N'canceled'))))`);
   });
 
   test('WHERE = com subconsulta', () => {
@@ -118,7 +153,13 @@ describe('Query Builder - Subquery WHERE Tests', () => {
       .toQueryString();
 
     // Assert
-    expect(sql).toEqual(``);
+    expect(sql).toEqual(`SELECT *
+FROM [users] AS [u]
+WHERE ([u].[id] = 
+  (SELECT TOP 1
+    [d].[managerId]
+    FROM [departments] AS [d]
+    WHERE ([d].[name] = N'IT')))`);
   });
 
   test('WHERE > com subconsulta', () => {
@@ -127,13 +168,7 @@ describe('Query Builder - Subquery WHERE Tests', () => {
 
     // Act - Adicionando limit(1) na subconsulta
     const sql = users
-      .whereGreaterThan(
-        u => u.salary,
-        users
-          .select(u => ({ avg_salary: u.salary }))
-          .avg(u => u.avg_salary)
-          .limit(1),
-      )
+      .whereGreaterThan(u => u.salary, users.avg(u => u.salary).limit(1))
       .toQueryString();
 
     // Assert
@@ -141,7 +176,7 @@ describe('Query Builder - Subquery WHERE Tests', () => {
 FROM [users] AS [u]
 WHERE ([u].[salary] > 
   (SELECT TOP 1
-    [u].[salary] AS [avg_salary], AVG([u].[avg_salary]) AS [avg]
+    AVG([u].[salary]) AS [avg]
     FROM [users] AS [u]))`);
   });
 
@@ -246,7 +281,12 @@ WHERE ([u].[departmentId] <>
         u => u.id,
         orders.where(o => o.amount > 1000).select(o => o.userId),
       )
-      .whereNotExists(orders.where(o => o.status === 'canceled').select(_ => 1))
+      .whereNotExists(
+        orders,
+        user => user.id,
+        order => order.userId,
+        query => query.where(o => o.status === 'canceled').select(_ => 1),
+      )
       .whereEqual(
         u => u.departmentId,
         departments
@@ -267,7 +307,7 @@ WHERE ((([u].[name] LIKE CONCAT(N'%', N'John', N'%') AND [u].[id] IN (
   (SELECT
     1
     FROM [orders] AS [o]
-    WHERE ([o].[status] = N'canceled')))) AND ([u].[departmentId] = 
+    WHERE (([o].[userId] = [u].[id]) AND ([o].[status] = N'canceled'))))) AND ([u].[departmentId] = 
   (SELECT TOP 1
     [d].[id]
     FROM [departments] AS [d]

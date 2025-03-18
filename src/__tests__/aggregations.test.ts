@@ -103,7 +103,7 @@ WHERE ([u].[age] > 18)`);
     expect(sql).toEqual(`SELECT
   AVG([o].[amount]) AS [avg]
 FROM [users] AS [u]
-  INNER JOIN [orders] AS [o] ON ([u].[id] = [o].[userId])
+INNER JOIN [orders] AS [o] ON ([u].[id] = [o].[userId])
 WHERE (([u].[age] > 18) AND ([o].[amount] > 100))`);
   });
 });

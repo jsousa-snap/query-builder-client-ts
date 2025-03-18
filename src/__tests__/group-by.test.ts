@@ -101,7 +101,7 @@ GROUP BY [u].[age]`);
     expect(sql).toEqual(`SELECT
   [u].[age] AS [age], SUM([o].[amount]) AS [totalAmount]
 FROM [users] AS [u]
-  INNER JOIN [orders] AS [o] ON ([u].[id] = [o].[userId])
+INNER JOIN [orders] AS [o] ON ([u].[id] = [o].[userId])
 GROUP BY [u].[age]`);
   });
 
