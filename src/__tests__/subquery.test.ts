@@ -72,7 +72,13 @@ describe('Subquery Queries', () => {
       );
     const sql = query.toQueryString();
 
-    expect(sql).toContain(``);
+    expect(sql).toContain(`SELECT
+[u].[id] AS [userId], [u].[name] AS [name],
+  (SELECT
+    COUNT(*) AS [count]
+    FROM [orders] AS [o]
+    WHERE (([o].[userId] = [u].[id]) AND (([o].[status] = N'active') AND ([o].[amount] > 100)))) AS [activeOrders]
+FROM [users] AS [u]`);
   });
 
   test('Complex subquery with multiple levels', () => {

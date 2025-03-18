@@ -137,7 +137,12 @@ describe('Query Builder - Subquery WHERE Tests', () => {
       .toQueryString();
 
     // Assert
-    expect(sql).toEqual(``);
+    expect(sql).toEqual(`SELECT *
+FROM [users] AS [u]
+WHERE ([u].[salary] > 
+  (SELECT TOP 1
+    [u].[salary] AS [avg_salary], AVG([u].[avg_salary]) AS [avg]
+    FROM [users] AS [u]))`);
   });
 
   test('WHERE >= com subconsulta', () => {
@@ -154,7 +159,12 @@ describe('Query Builder - Subquery WHERE Tests', () => {
       .toQueryString();
 
     // Assert
-    expect(sql).toEqual(``);
+    expect(sql).toEqual(`SELECT *
+FROM [users] AS [u]
+WHERE ([u].[salary] >= 
+  (SELECT TOP 1
+    50000 AS [min_salary]
+    FROM [departments] AS [d]))`);
   });
 
   test('WHERE < com subconsulta', () => {
@@ -169,9 +179,10 @@ describe('Query Builder - Subquery WHERE Tests', () => {
     // Assert
     expect(sql).toEqual(`SELECT *
 FROM [users] AS [u]
-WHERE ([u].[salary] < (SELECT TOP 1
-  100000 AS [max_salary]
-FROM [departments] AS [d]))`);
+WHERE ([u].[salary] < 
+  (SELECT TOP 1
+    100000 AS [max_salary]
+    FROM [departments] AS [d]))`);
   });
 
   test('WHERE <= com subconsulta', () => {
@@ -190,9 +201,10 @@ FROM [departments] AS [d]))`);
     // Assert
     expect(sql).toEqual(`SELECT *
 FROM [users] AS [u]
-WHERE ([u].[salary] <= (SELECT TOP 1
-  75000 AS [avg_salary]
-FROM [departments] AS [d]))`);
+WHERE ([u].[salary] <= 
+  (SELECT TOP 1
+    75000 AS [avg_salary]
+    FROM [departments] AS [d]))`);
   });
 
   test('WHERE != com subconsulta', () => {
@@ -212,7 +224,13 @@ FROM [departments] AS [d]))`);
       .toQueryString();
 
     // Assert
-    expect(sql).toEqual(``);
+    expect(sql).toEqual(`SELECT *
+FROM [users] AS [u]
+WHERE ([u].[departmentId] <> 
+  (SELECT TOP 1
+    [d].[id]
+    FROM [departments] AS [d]
+    WHERE ([d].[name] = N'HR')))`);
   });
 
   test('Consulta complexa com múltiplas subconsultas', () => {
@@ -241,15 +259,18 @@ FROM [departments] AS [d]))`);
     // Assert
     expect(sql).toEqual(`SELECT *
 FROM [users] AS [u]
-WHERE ((([u].[name] LIKE CONCAT(N'%', N'John', N'%') AND [u].[id] IN ((SELECT
-  [o].[userId]
-FROM [orders] AS [o]
-WHERE ([o].[amount] > 1000)))) AND NOT EXISTS ((SELECT
-  1
-FROM [orders] AS [o]
-WHERE ([o].[status] = N'canceled')))) AND ([u].[departmentId] = (SELECT TOP 1
-  [d].[id]
-FROM [departments] AS [d]
-WHERE ([d].[name] = N'Sales'))))`);
+WHERE ((([u].[name] LIKE CONCAT(N'%', N'John', N'%') AND [u].[id] IN (
+  (SELECT
+    [o].[userId]
+    FROM [orders] AS [o]
+    WHERE ([o].[amount] > 1000)))) AND NOT EXISTS (
+  (SELECT
+    1
+    FROM [orders] AS [o]
+    WHERE ([o].[status] = N'canceled')))) AND ([u].[departmentId] = 
+  (SELECT TOP 1
+    [d].[id]
+    FROM [departments] AS [d]
+    WHERE ([d].[name] = N'Sales'))))`);
   });
 });

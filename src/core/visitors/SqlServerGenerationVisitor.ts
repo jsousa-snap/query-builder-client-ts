@@ -281,9 +281,38 @@ export class SqlServerGenerationVisitor implements IExpressionVisitor<string> {
     }
   }
   /**
-   * Visits a select expression with proper formatting
+   * Visits a select expression
    */
+  visitScalarSubqueryExpression(expr: ScalarSubqueryExpression): string {
+    // Save current state
+    const wasSubquery = this.isSubquery;
+    const originalIndentLevel = this.indentLevel;
 
+    try {
+      // We're in a subquery
+      this.isSubquery = true;
+
+      // Add just one level of indentation for the opening parenthesis (2 spaces)
+      const parentIndent = ' '.repeat(originalIndentLevel * this.indentSize + 2);
+
+      // Add just one more level for subquery content
+      this.indentLevel += 1;
+
+      // Generate the subquery SQL with moderate indentation
+      const subquerySql = expr.getQuery().accept(this);
+
+      // Return with proper formatting - but NO comma
+      return '\n' + parentIndent + '(' + subquerySql + ')';
+    } finally {
+      // Restore original state
+      this.isSubquery = wasSubquery;
+      this.indentLevel = originalIndentLevel;
+    }
+  }
+
+  /**
+   * Visits a select expression
+   */
   visitSelectExpression(expr: SelectExpression): string {
     // Save current state
     const originalStringBuilder = [...this.sb];
@@ -291,10 +320,8 @@ export class SqlServerGenerationVisitor implements IExpressionVisitor<string> {
 
     // Clear state for this query
     this.sb = [];
-    this.indentLevel = 0;
 
-    // Add SELECT clause - no parentheses here, that's the responsibility
-    // of the visitor that's using this SELECT (like ScalarSubqueryExpression)
+    // Add SELECT clause
     this.append('SELECT');
 
     // Verificar se temos LIMIT sem OFFSET - se sim, usar TOP
@@ -322,46 +349,53 @@ export class SqlServerGenerationVisitor implements IExpressionVisitor<string> {
     if (projections.length === 0) {
       this.append(' *');
     } else {
+      // For projections, add a newline
       this.appendLine('');
-      this.indent();
 
-      // Primeiro campo
-      this.append(this.getIndent() + projections[0].accept(this));
+      // Important: Use indentation for projections regardless of current level
+      this.indentLevel = this.isSubquery ? originalIndentLevel : 1;
 
-      // Campos seguintes (na mesma linha)
+      // Get current indentation
+      const currentIndent = this.getIndent();
+
+      // First projection with proper indentation
+      this.append(currentIndent + projections[0].accept(this));
+
+      // Subsequent projections
       for (let i = 1; i < projections.length; i++) {
-        this.append(', ' + projections[i].accept(this));
-      }
+        const projection = projections[i];
+        const isSubquery = projection.getExpression() instanceof ScalarSubqueryExpression;
 
-      this.unindent();
+        if (isSubquery) {
+          // For subqueries, add comma at beginning of new line
+          this.append(',');
+          this.append(projection.accept(this));
+        } else {
+          // For regular fields, stay on same line with comma before
+          this.append(', ' + projection.accept(this));
+        }
+      }
     }
+
+    // Reset indent level to original or 0 for main query
+    this.indentLevel = this.isSubquery ? originalIndentLevel : 0;
 
     // Add FROM clause
     this.appendLine('');
-    this.append('FROM ' + expr.getFromTable().accept(this));
-
-    // Add JOINs
-    const joins = expr.getJoins();
-    if (joins.length > 0) {
-      this.indent();
-      for (const join of joins) {
-        this.appendLine(join.accept(this));
-      }
-      this.unindent();
-    }
+    this.append(this.getIndent() + 'FROM ' + expr.getFromTable().accept(this));
 
     // Add WHERE clause
     const whereClause = expr.getWhereClause();
     if (whereClause) {
       this.appendLine('');
-      this.append('WHERE ' + whereClause.accept(this));
+      this.append(this.getIndent() + 'WHERE ' + whereClause.accept(this));
     }
 
     // Add GROUP BY clause
     const groupByColumns = expr.getGroupByColumns();
     if (groupByColumns.length > 0) {
       this.appendLine('');
-      this.append('GROUP BY ');
+      this.append(this.getIndent() + 'GROUP BY ');
 
       // Todos os campos do GROUP BY na mesma linha
       this.append(groupByColumns.map(c => c.accept(this)).join(', '));
@@ -370,14 +404,14 @@ export class SqlServerGenerationVisitor implements IExpressionVisitor<string> {
       const havingClause = expr.getHavingClause();
       if (havingClause) {
         this.appendLine('');
-        this.append('HAVING ' + havingClause.accept(this));
+        this.append(this.getIndent() + 'HAVING ' + havingClause.accept(this));
       }
     }
 
     // Add ORDER BY clause
     if (orderByColumns.length > 0) {
       this.appendLine('');
-      this.append('ORDER BY ');
+      this.append(this.getIndent() + 'ORDER BY ');
 
       // Todos os campos do ORDER BY na mesma linha
       const orderByExpr = orderByColumns
@@ -393,11 +427,11 @@ export class SqlServerGenerationVisitor implements IExpressionVisitor<string> {
     // SQL Server usa OFFSET/FETCH para paginação (requer ORDER BY)
     if (offsetValue) {
       this.appendLine('');
-      this.append(`OFFSET ${offsetValue.accept(this)} ROWS`);
+      this.append(this.getIndent() + `OFFSET ${offsetValue.accept(this)} ROWS`);
 
       if (limitValue) {
         this.appendLine('');
-        this.append(`FETCH NEXT ${limitValue.accept(this)} ROWS ONLY`);
+        this.append(this.getIndent() + `FETCH NEXT ${limitValue.accept(this)} ROWS ONLY`);
       }
     }
 
@@ -411,27 +445,6 @@ export class SqlServerGenerationVisitor implements IExpressionVisitor<string> {
     // Return the generated SQL
     return sql;
   }
-
-  // Also fix the visitScalarSubqueryExpression method to avoid creating new visitor instances:
-  visitScalarSubqueryExpression(expr: ScalarSubqueryExpression): string {
-    // Save current state
-    const wasSubquery = this.isSubquery;
-
-    // Set subquery flag (this just affects formatting, not structure)
-    this.isSubquery = true;
-
-    try {
-      // Generate the subquery SQL
-      const subquerySql = expr.getQuery().accept(this);
-
-      // The scalar subquery visitor is responsible for adding parentheses
-      return `(${subquerySql})`;
-    } finally {
-      // Always restore original state, even if an error occurs
-      this.isSubquery = wasSubquery;
-    }
-  }
-
   /**
    * Visits a table expression
    */
