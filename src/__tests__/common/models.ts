@@ -21,6 +21,12 @@ export interface Order {
   createdAt: Date;
 }
 
+export interface OrderProduct {
+  id: number;
+  orderId: number;
+  productId: number;
+}
+
 /**
  * Interface para modelo de Produto
  */

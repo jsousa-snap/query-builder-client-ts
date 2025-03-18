@@ -278,20 +278,17 @@ WHERE
     // Assert
     expect(normalizeSQL(query)).toContain(
       normalizeSQL(`SELECT *
-FROM users AS u
-WHERE (((LIKE(u.name, CONCAT('%', 'John', '%'))
-         AND u.id IN (
-                        (SELECT o.userId AS value
-                         FROM orders AS o
-                         WHERE (o.amount > 1000))))
-        AND NOT EXISTS (
-                          (SELECT 1 AS value
-                           FROM orders AS o
-                           WHERE (o.status = 'canceled'))))
-       AND (u.departmentId =
-              (SELECT TOP 1 d.id AS value
-               FROM departments AS d
-               WHERE (d.name = 'Sales'))))`),
+FROM [users] AS [u]
+WHERE ((([u].[name] LIKE CONCAT(N'%', N'John', N'%') AND [u].[id] IN ((SELECT
+  [o].[userId] AS [value]
+FROM [orders] AS [o]
+WHERE ([o].[amount] > 1000)))) AND NOT EXISTS ((SELECT
+  1 AS [value]
+FROM [orders] AS [o]
+WHERE ([o].[status] = N'canceled')))) AND ([u].[departmentId] = (SELECT TOP 1
+  [d].[id] AS [value]
+FROM [departments] AS [d]
+WHERE ([d].[name] = N'Sales'))))`),
     );
   });
 });

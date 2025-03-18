@@ -26,6 +26,7 @@ import { PropertyTracker } from './PropertyTracker';
 import { ScalarSubqueryExpression } from '../expressions/ScalarSubqueryExpression';
 import { ExpressionSerializer } from '../../utils/ExpressionSerializer';
 import { FunctionExpression } from '../expressions/FunctionExpression';
+import { SqlServerGenerationVisitor } from '../visitors/SqlServerGenerationVisitor';
 
 /**
  * Represents a query that can be built and executed against a data source
@@ -593,7 +594,7 @@ export class Queryable<T> {
    * @param joinType The type of join to perform
    */
 
-  join<U, TResult>(
+  join<U = T, TResult = T>(
     target: DbSet<U>,
     sourceKeySelector: JoinKeySelector<T>,
     targetKeySelector: JoinKeySelector<U>,
@@ -1947,13 +1948,12 @@ export class Queryable<T> {
     );
 
     // Create a SQL visitor
-    const visitor = new SqlGenerationVisitor();
+    const visitor = new SqlServerGenerationVisitor();
 
     // Generate the SQL
     const sql = selectExpr.accept(visitor);
 
-    // Format the SQL
-    return formatSQLClientStyle(sql);
+    return sql;
   }
 
   /**

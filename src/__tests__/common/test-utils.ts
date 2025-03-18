@@ -8,6 +8,8 @@ export function normalizeSQL(sql: string): string {
     .replace(/\s+/g, ' ') // Substituir múltiplos espaços em branco por um único espaço
     .replace(/\s*\(\s*/g, '(') // Remover espaços antes e depois de parênteses de abertura
     .replace(/\s*\)\s*/g, ')') // Remover espaços antes e depois de parênteses de fechamento
+    .replace(/\s*\[\s*/g, '[') // Remover espaços antes e depois de colchetes de abertura
+    .replace(/\s*\]\s*/g, ']') // Remover espaços antes e depois de colchetes de fechamento
     .replace(/\s*,\s*/g, ',') // Remover espaços antes e depois de vírgulas
     .replace(/\s*=\s*/g, '=') // Remover espaços antes e depois de sinais de igual
     .replace(/\s*>\s*/g, '>') // Remover espaços antes e depois de sinais de maior

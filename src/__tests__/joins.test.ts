@@ -1,6 +1,6 @@
 import { DbContext } from '../core/context/DbContext';
 import { normalizeSQL } from './common/test-utils';
-import { User, Order, Product } from './common/models';
+import { User, Order, Product, OrderProduct } from './common/models';
 import { JoinType } from '../core/expressions/JoinExpression';
 import { DbSet } from '../core/context/DbSet';
 import { IDatabaseProvider } from '../core/query/Types';
@@ -15,12 +15,14 @@ describe('Join Queries', () => {
   let users: DbSet<User>;
   let orders: DbSet<Order>;
   let products: DbSet<Product>;
+  let orderProducts: DbSet<OrderProduct>;
 
   beforeEach(() => {
     dbContext = new DbContext(mockDatabaseProvider);
     users = dbContext.set<User>('users');
     orders = dbContext.set<Order>('orders');
     products = dbContext.set<Product>('products');
+    orderProducts = dbContext.set<OrderProduct>('orderProducts');
   });
 
   test('Simple inner join', () => {
@@ -32,9 +34,9 @@ describe('Join Queries', () => {
     );
     const sql = query.toQueryString();
 
-    expect(normalizeSQL(sql)).toContain(
-      normalizeSQL('SELECT * FROM users AS u INNER JOIN orders AS o ON (u.id = o.userId)'),
-    );
+    expect(sql).toEqual(`SELECT *
+FROM [users] AS [u]
+  INNER JOIN [orders] AS [o] ON ([u].[id] = [o].[userId])`);
   });
 
   test('Join with column selection', () => {
@@ -51,11 +53,10 @@ describe('Join Queries', () => {
       }));
     const sql = query.toQueryString();
 
-    expect(normalizeSQL(sql)).toContain(
-      normalizeSQL(
-        'SELECT u.name AS userName, o.amount AS orderAmount FROM users AS u INNER JOIN orders AS o ON (u.id = o.userId)',
-      ),
-    );
+    expect(sql).toEqual(`SELECT
+  [u].[name] AS [userName], [o].[amount] AS [orderAmount]
+FROM [users] AS [u]
+  INNER JOIN [orders] AS [o] ON ([u].[id] = [o].[userId])`);
   });
 
   test('Multiple joins', () => {
@@ -67,8 +68,17 @@ describe('Join Queries', () => {
         (user, order) => ({ user, order }),
       )
       .join(
-        products,
+        orderProducts,
         joined => joined.order.id,
+        orderProduct => orderProduct.orderId,
+        (joined, orderProduct) => ({
+          ...joined,
+          orderProduct,
+        }),
+      )
+      .join(
+        products,
+        joined => joined.orderProduct.productId,
         product => product.id,
         (joined, product) => ({
           ...joined,
@@ -77,14 +87,11 @@ describe('Join Queries', () => {
       );
     const sql = query.toQueryString();
 
-    expect(normalizeSQL(sql)).toContain(
-      normalizeSQL(`
-        SELECT * 
-        FROM users AS u 
-        INNER JOIN orders AS o ON (u.id = o.userId) 
-        INNER JOIN products AS p ON (o.id = p.id)
-      `),
-    );
+    expect(sql).toEqual(`SELECT *
+FROM [users] AS [u]
+  INNER JOIN [orders] AS [o] ON ([u].[id] = [o].[userId])
+  INNER JOIN [orderProducts] AS [o1] ON ([o].[id] = [o1].[orderId])
+  INNER JOIN [products] AS [p] ON ([o1].[productId] = [p].[id])`);
   });
 
   test('Left join', () => {
@@ -97,9 +104,9 @@ describe('Join Queries', () => {
     );
     const sql = query.toQueryString();
 
-    expect(normalizeSQL(sql)).toContain(
-      normalizeSQL('SELECT * FROM users AS u LEFT JOIN orders AS o ON (u.id = o.userId)'),
-    );
+    expect(sql).toEqual(`SELECT *
+FROM [users] AS [u]
+  LEFT OUTER JOIN [orders] AS [o] ON ([u].[id] = [o].[userId])`);
   });
 
   test('Join with nested property access', () => {
@@ -126,15 +133,9 @@ describe('Join Queries', () => {
       }));
     const sql = query.toQueryString();
 
-    expect(normalizeSQL(sql)).toContain(
-      normalizeSQL(`
-        SELECT 
-          u.id AS userId, 
-          u.name AS userName, 
-          o.amount AS orderAmount 
-        FROM users AS u 
-        INNER JOIN orders AS o ON (u.id = o.userId)
-      `),
-    );
+    expect(sql).toContain(`SELECT
+  [u].[id] AS [userId], [u].[name] AS [userName], [o].[amount] AS [orderAmount]
+FROM [users] AS [u]
+  INNER JOIN [orders] AS [o] ON ([u].[id] = [o].[userId])`);
   });
 });

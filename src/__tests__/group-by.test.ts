@@ -28,9 +28,10 @@ describe('Group By Queries', () => {
       }));
     const sql = query.toQueryString();
 
-    expect(normalizeSQL(sql)).toContain(
-      normalizeSQL('SELECT u.age AS age FROM users AS u GROUP BY u.age'),
-    );
+    expect(sql).toEqual(`SELECT
+  [u].[age] AS [age]
+FROM [users] AS [u]
+GROUP BY [u].[age]`);
   });
 
   test('Group by multiple columns', () => {
@@ -43,11 +44,10 @@ describe('Group By Queries', () => {
       .count();
     const sql = query.toQueryString();
 
-    expect(normalizeSQL(sql)).toContain(
-      normalizeSQL(
-        'SELECT u.age AS age, u.isActive AS isActive, COUNT(*) AS count FROM users AS u GROUP BY u.age, u.isActive',
-      ),
-    );
+    expect(sql).toEqual(`SELECT
+  [u].[age] AS [age], [u].[isActive] AS [isActive], COUNT(*) AS [count]
+FROM [users] AS [u]
+GROUP BY [u].[age], [u].[isActive]`);
   });
 
   test('Group by with having clause', () => {
@@ -60,11 +60,11 @@ describe('Group By Queries', () => {
       .having(g => (g as any).count > 5);
     const sql = query.toQueryString();
 
-    expect(normalizeSQL(sql)).toContain(
-      normalizeSQL(
-        'SELECT u.age AS age, COUNT(*) AS count FROM users AS u GROUP BY u.age HAVING (COUNT(*) > 5)',
-      ),
-    );
+    expect(sql).toEqual(`SELECT
+  [u].[age] AS [age], COUNT(*) AS [count]
+FROM [users] AS [u]
+GROUP BY [u].[age]
+HAVING (COUNT(*) > 5)`);
   });
 
   test('Group by with aggregation', () => {
@@ -76,9 +76,10 @@ describe('Group By Queries', () => {
       .avg(g => g.age, 'averageAge');
     const sql = query.toQueryString();
 
-    expect(normalizeSQL(sql)).toContain(
-      normalizeSQL('SELECT u.age AS age, AVG(u.age) AS averageAge FROM users AS u GROUP BY u.age'),
-    );
+    expect(sql).toEqual(`SELECT
+  [u].[age] AS [age], AVG([u].[age]) AS [averageAge]
+FROM [users] AS [u]
+GROUP BY [u].[age]`);
   });
 
   test('Group by with join and aggregation', () => {
@@ -97,15 +98,11 @@ describe('Group By Queries', () => {
       .sum(g => g.amount, 'totalAmount');
     const sql = query.toQueryString();
 
-    expect(normalizeSQL(sql)).toContain(
-      normalizeSQL(`
-          SELECT u.age AS age,
-                 SUM(o.amount) AS totalAmount
-          FROM users AS u
-          INNER JOIN orders AS o ON (u.id = o.userId)
-          GROUP BY u.age
-        `),
-    );
+    expect(sql).toEqual(`SELECT
+  [u].[age] AS [age], SUM([o].[amount]) AS [totalAmount]
+FROM [users] AS [u]
+  INNER JOIN [orders] AS [o] ON ([u].[id] = [o].[userId])
+GROUP BY [u].[age]`);
   });
 
   test('Group by with complex having condition', () => {
@@ -123,17 +120,12 @@ describe('Group By Queries', () => {
       .count();
     const sql = query.toQueryString();
 
-    expect(normalizeSQL(sql)).toContain(
-      normalizeSQL(`
-        SELECT
-  u.age AS age,
-  AVG(u.age) AS averageAge,
-  COUNT(*) AS count
-FROM users AS u
-GROUP BY
-  u.age
-HAVING
-  ((COUNT(*) > 5) AND (AVG(u.age) > 25))`),
+    expect(sql).toEqual(
+      `SELECT
+  [u].[age] AS [age], AVG([u].[age]) AS [averageAge], COUNT(*) AS [count]
+FROM [users] AS [u]
+GROUP BY [u].[age]
+HAVING ((COUNT(*) > 5) AND (AVG([u].[age]) > 25))`,
     );
   });
 
@@ -147,17 +139,10 @@ HAVING
       .count();
     const sql = query.toQueryString();
 
-    expect(normalizeSQL(sql)).toContain(
-      normalizeSQL(`
-SELECT
-  u.age AS age,
-  COUNT(*) AS count
-FROM users AS u
-GROUP BY
-  u.age
-ORDER BY
-  COUNT(*) ASC
-        `),
-    );
+    expect(sql).toEqual(`SELECT
+  [u].[age] AS [age], COUNT(*) AS [count]
+FROM [users] AS [u]
+GROUP BY [u].[age]
+ORDER BY COUNT(*) ASC`);
   });
 });

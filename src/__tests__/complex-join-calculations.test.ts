@@ -68,7 +68,7 @@ describe('Complex Join Calculations Tests', () => {
     jest.clearAllMocks();
   });
 
-  test('Multiple joins with calculated total field', () => {
+  test('Multiple joins with calculated total field', async () => {
     // Construir a consulta com múltiplos joins e campo calculado
     const query = users
       .join(
@@ -100,19 +100,12 @@ describe('Complex Join Calculations Tests', () => {
     const sql = query.toQueryString();
 
     // Verificar se o SQL gerado contém todas as tabelas e joins esperados
-    expect(normalizeSQL(sql)).toContain(
-      normalizeSQL(`
-SELECT
-  u.name AS userName,
-  p.name AS productName,
-  o1.quantity AS quantity,
-  (o1.quantity * p.price) AS total
-FROM users AS u
-  INNER JOIN orders AS o ON (u.id = o.userId)
-  INNER JOIN order_items AS o1 ON (o.id = o1.orderId)
-  INNER JOIN products AS p ON (o1.productId = p.id)
-      `),
-    );
+    expect(sql).toEqual(`SELECT
+  [u].[name] AS [userName], [p].[name] AS [productName], [o1].[quantity] AS [quantity], ([o1].[quantity] * [p].[price]) AS [total]
+FROM [users] AS [u]
+  INNER JOIN [orders] AS [o] ON ([u].[id] = [o].[userId])
+  INNER JOIN [order_items] AS [o1] ON ([o].[id] = [o1].[orderId])
+  INNER JOIN [products] AS [p] ON ([o1].[productId] = [p].[id])`);
 
     // Testar a execução da consulta
     return query.toListAsync().then(results => {
@@ -166,22 +159,13 @@ FROM users AS u
     const sql = query.toQueryString();
 
     // Verificar se o SQL gerado contém a cláusula WHERE esperada
-    expect(normalizeSQL(sql)).toContain(
-      normalizeSQL(`
-        SELECT
-  u.name AS userName,
-  p.name AS productName,
-  o1.quantity AS quantity,
-  (o1.quantity * p.price) AS total
-FROM users AS u
-  INNER JOIN orders AS o ON (u.id = o.userId)
-  INNER JOIN order_items AS o1 ON (o.id = o1.orderId)
-  INNER JOIN products AS p ON (o1.productId = p.id)
-WHERE
-  (((o.status = 'completed') AND
-  (p.price > 100)) AND
-  (o1.quantity >= 1))`),
-    );
+    expect(sql).toEqual(`SELECT
+  [u].[name] AS [userName], [p].[name] AS [productName], [o1].[quantity] AS [quantity], ([o1].[quantity] * [p].[price]) AS [total]
+FROM [users] AS [u]
+  INNER JOIN [orders] AS [o] ON ([u].[id] = [o].[userId])
+  INNER JOIN [order_items] AS [o1] ON ([o].[id] = [o1].[orderId])
+  INNER JOIN [products] AS [p] ON ([o1].[productId] = [p].[id])
+WHERE ((([o].[status] = N'completed') AND ([p].[price] > 100)) AND ([o1].[quantity] >= 1))`);
   });
 
   test('Multiple joins with grouping and aggregation (using type assertion)', () => {
@@ -223,20 +207,13 @@ WHERE
     // Obter o SQL gerado
     const sql = query.toQueryString();
 
-    expect(sql).toContain(
-      `SELECT
-  u.id AS userId,
-  p.id AS productId,
-  SUM(o1.quantity) AS totalQuantity,
-  SUM(p.price) AS totalAmount
-FROM users AS u
-  INNER JOIN orders AS o ON (u.id = o.userId)
-  INNER JOIN order_items AS o1 ON (o.id = o1.orderId)
-  INNER JOIN products AS p ON (o1.productId = p.id)
-GROUP BY
-  u.id, p.id
-HAVING
-  (SUM(o1.quantity) > 5)`,
-    );
+    expect(sql).toEqual(`SELECT
+  [u].[id] AS [userId], [p].[id] AS [productId], SUM([o1].[quantity]) AS [totalQuantity], SUM([p].[price]) AS [totalAmount]
+FROM [users] AS [u]
+  INNER JOIN [orders] AS [o] ON ([u].[id] = [o].[userId])
+  INNER JOIN [order_items] AS [o1] ON ([o].[id] = [o1].[orderId])
+  INNER JOIN [products] AS [p] ON ([o1].[productId] = [p].[id])
+GROUP BY [u].[id], [p].[id]
+HAVING (SUM([o1].[quantity]) > 5)`);
   });
 });
