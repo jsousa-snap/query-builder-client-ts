@@ -347,7 +347,7 @@ export class Queryable<T> {
         const expression = lambdaParser.processSimpleExpression(node, this.alias);
 
         // Criar uma única projeção com alias "value"
-        newQueryable.projections = [this.expressionBuilder.createProjection(expression, 'value')];
+        newQueryable.projections = [this.expressionBuilder.createProjection(expression, null)];
 
         // Se for um acesso de coluna, registrar no rastreador
         if (expression instanceof ColumnExpression) {

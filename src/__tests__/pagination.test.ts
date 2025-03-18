@@ -25,61 +25,48 @@ describe('Pagination Queries', () => {
     const query = users.limit(10);
     const sql = query.toQueryString();
 
-    expect(normalizeSQL(sql)).toContain(normalizeSQL('SELECT * FROM users AS u LIMIT 10'));
+    expect(sql).toEqual(`SELECT TOP 10 *
+FROM [users] AS [u]`);
   });
 
   test('Offset results', () => {
-    const query = users.offset(20);
+    const query = users.orderBy(u => u.age).offset(20);
     const sql = query.toQueryString();
 
-    const metadata = ExpressionSerializer.serialize(query.toMetadata());
-
-    expect(normalizeSQL(sql)).toContain(normalizeSQL('SELECT * FROM users AS u OFFSET 20'));
+    expect(sql).toEqual(`SELECT *
+FROM [users] AS [u]
+ORDER BY [u].[age] ASC
+OFFSET 20 ROWS`);
   });
 
   test('Limit and offset combined', () => {
-    const query = users.limit(15).offset(30);
-    const sql = query.toQueryString();
-
-    expect(normalizeSQL(sql)).toContain(
-      normalizeSQL('SELECT * FROM users AS u LIMIT 15 OFFSET 30'),
-    );
-  });
-
-  test('Pagination with order by', () => {
     const query = users
-      .orderBy(u => u.name)
-      .limit(10)
-      .offset(20);
+      .orderBy(u => u.age)
+      .limit(15)
+      .offset(30);
     const sql = query.toQueryString();
 
-    expect(normalizeSQL(sql)).toContain(
-      normalizeSQL(`
-        SELECT * 
-        FROM users AS u 
-        ORDER BY u.name ASC 
-        LIMIT 10 
-        OFFSET 20
-      `),
-    );
+    expect(sql).toEqual(`SELECT *
+FROM [users] AS [u]
+ORDER BY [u].[age] ASC
+OFFSET 30 ROWS
+FETCH NEXT 15 ROWS ONLY`);
   });
 
   test('Pagination with where clause', () => {
     const query = users
       .where(u => u.age > 18)
+      .orderBy(u => u.age)
       .limit(5)
       .offset(10);
     const sql = query.toQueryString();
 
-    expect(normalizeSQL(sql)).toContain(
-      normalizeSQL(`
-        SELECT * 
-        FROM users AS u 
-        WHERE (u.age > 18) 
-        LIMIT 5 
-        OFFSET 10
-      `),
-    );
+    expect(sql).toEqual(`SELECT *
+FROM [users] AS [u]
+WHERE ([u].[age] > 18)
+ORDER BY [u].[age] ASC
+OFFSET 10 ROWS
+FETCH NEXT 5 ROWS ONLY`);
   });
 
   test('Pagination with join', () => {
@@ -90,18 +77,16 @@ describe('Pagination Queries', () => {
         order => order.userId,
         (user, order) => ({ user, order }),
       )
+      .orderBy(joined => joined.user.age)
       .limit(8)
       .offset(16);
     const sql = query.toQueryString();
 
-    expect(normalizeSQL(sql)).toContain(
-      normalizeSQL(`
-        SELECT * 
-        FROM users AS u 
-        INNER JOIN orders AS o ON (u.id = o.userId) 
-        LIMIT 8 
-        OFFSET 16
-      `),
-    );
+    expect(sql).toEqual(`SELECT *
+FROM [users] AS [u]
+  INNER JOIN [orders] AS [o] ON ([u].[id] = [o].[userId])
+ORDER BY [u].[age] ASC
+OFFSET 16 ROWS
+FETCH NEXT 8 ROWS ONLY`);
   });
 });

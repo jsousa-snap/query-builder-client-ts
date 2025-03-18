@@ -1,5 +1,4 @@
 import { DbContext } from '../core/context/DbContext';
-import { normalizeSQL } from './common/test-utils';
 import { User } from './common/models';
 import { DbSet } from '../core/context/DbSet';
 import { IDatabaseProvider } from '../core/query/Types';
@@ -22,7 +21,8 @@ describe('Select Queries', () => {
     const query = users.query();
     const sql = query.toQueryString();
 
-    expect(normalizeSQL(sql)).toContain(normalizeSQL('SELECT * FROM users AS u'));
+    expect(sql).toEqual(`SELECT *
+FROM [users] AS [u]`);
   });
 
   test('Select specific columns', () => {
@@ -32,8 +32,8 @@ describe('Select Queries', () => {
     }));
     const sql = query.toQueryString();
 
-    expect(normalizeSQL(sql)).toContain(
-      normalizeSQL('SELECT u.id AS userId, u.name AS userName FROM users AS u'),
-    );
+    expect(sql).toEqual(`SELECT
+  [u].[id] AS [userId], [u].[name] AS [userName]
+FROM [users] AS [u]`);
   });
 });

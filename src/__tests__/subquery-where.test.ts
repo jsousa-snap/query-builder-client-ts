@@ -53,18 +53,7 @@ describe('Query Builder - Subquery WHERE Tests', () => {
       .toQueryString();
 
     // Assert
-    expect(normalizeSQL(query)).toContain(
-      normalizeSQL(`SELECT
-  *
-FROM users AS u
-WHERE
-  u.id IN ((
-SELECT
-  o.userId AS userId
-FROM orders AS o
-WHERE
-  (o.status = 'completed')))`),
-    );
+    expect(query).toEqual(``);
   });
 
   test('WHERE NOT IN com subconsulta', () => {
@@ -81,11 +70,7 @@ WHERE
       .toQueryString();
 
     // Assert
-    expect(normalizeSQL(query)).toContain(
-      normalizeSQL(
-        "WHERE u.id NOT IN (SELECT o.userId FROM orders AS o WHERE (o.status = 'canceled'))",
-      ),
-    );
+    expect(query).toEqual(``);
   });
 
   test('WHERE EXISTS com subconsulta', () => {
@@ -94,23 +79,12 @@ WHERE
     const orders = dbContext.set<Order>('orders');
 
     // Act
-    const query = users
+    const sql = users
       .whereExists(orders.where(o => o.status === 'completed').select(_ => 1))
       .toQueryString();
 
     // Assert
-    expect(normalizeSQL(query)).toContain(
-      normalizeSQL(`SELECT
-  *
-FROM users AS u
-WHERE
-  EXISTS ((
-SELECT
-  1 AS value
-FROM orders AS o
-WHERE
-  (o.status = 'completed')))`),
-    );
+    expect(sql).toEqual(``);
   });
 
   test('WHERE NOT EXISTS com subconsulta', () => {
@@ -119,14 +93,12 @@ WHERE
     const orders = dbContext.set<Order>('orders');
 
     // Act
-    const query = users
+    const sql = users
       .whereNotExists(orders.where(o => o.status === 'canceled').select(_ => 1))
       .toQueryString();
 
     // Assert
-    expect(normalizeSQL(query)).toContain(
-      normalizeSQL("WHERE NOT EXISTS (SELECT 1 FROM orders AS o WHERE (o.status = 'canceled'))"),
-    );
+    expect(sql).toEqual(``);
   });
 
   test('WHERE = com subconsulta', () => {
@@ -135,7 +107,7 @@ WHERE
     const departments = dbContext.set<Department>('departments');
 
     // Act - Adicionando limit(1) na subconsulta
-    const query = users
+    const sql = users
       .whereEqual(
         u => u.id,
         departments
@@ -146,11 +118,7 @@ WHERE
       .toQueryString();
 
     // Assert
-    expect(normalizeSQL(query)).toContain(
-      normalizeSQL(
-        "WHERE (u.id = (SELECT TOP 1 d.managerId FROM departments AS d WHERE (d.name = 'IT')))",
-      ),
-    );
+    expect(sql).toEqual(``);
   });
 
   test('WHERE > com subconsulta', () => {
@@ -158,7 +126,7 @@ WHERE
     const users = dbContext.set<User>('users');
 
     // Act - Adicionando limit(1) na subconsulta
-    const query = users
+    const sql = users
       .whereGreaterThan(
         u => u.salary,
         users
@@ -169,9 +137,7 @@ WHERE
       .toQueryString();
 
     // Assert
-    expect(normalizeSQL(query)).toContain(
-      normalizeSQL('WHERE (u.salary > (SELECT TOP 1 AVG(u.salary) AS avg FROM users AS u))'),
-    );
+    expect(sql).toEqual(``);
   });
 
   test('WHERE >= com subconsulta', () => {
@@ -180,7 +146,7 @@ WHERE
     const departments = dbContext.set<Department>('departments');
 
     // Act - Adicionando limit(1) na subconsulta
-    const query = users
+    const sql = users
       .whereGreaterThanOrEqual(
         u => u.salary,
         departments.select(d => ({ min_salary: 50000 })).limit(1),
@@ -188,9 +154,7 @@ WHERE
       .toQueryString();
 
     // Assert
-    expect(normalizeSQL(query)).toContain(
-      normalizeSQL('WHERE (u.salary >= (SELECT TOP 1 50000 AS min_salary FROM departments AS d))'),
-    );
+    expect(sql).toEqual(``);
   });
 
   test('WHERE < com subconsulta', () => {
@@ -198,15 +162,16 @@ WHERE
     const users = dbContext.set<User>('users');
     const departments = dbContext.set<Department>('departments');
 
-    // Act - Adicionando limit(1) na subconsulta
-    const query = users
+    const sql = users
       .whereLessThan(u => u.salary, departments.select(d => ({ max_salary: 100000 })).limit(1))
       .toQueryString();
 
     // Assert
-    expect(normalizeSQL(query)).toContain(
-      normalizeSQL('WHERE (u.salary < (SELECT TOP 1 100000 AS max_salary FROM departments AS d))'),
-    );
+    expect(sql).toEqual(`SELECT *
+FROM [users] AS [u]
+WHERE ([u].[salary] < (SELECT TOP 1
+  100000 AS [max_salary]
+FROM [departments] AS [d]))`);
   });
 
   test('WHERE <= com subconsulta', () => {
@@ -215,17 +180,19 @@ WHERE
     const departments = dbContext.set<Department>('departments');
 
     // Act - Adicionando limit(1) na subconsulta
-    const query = users
+    const sql = users
       .whereLessThanOrEqual(
         u => u.salary,
-        departments.select(d => ({ avg_salary: 75000 })).limit(1),
+        departments.select(_ => ({ avg_salary: 75000 })).limit(1),
       )
       .toQueryString();
 
     // Assert
-    expect(normalizeSQL(query)).toContain(
-      normalizeSQL('WHERE (u.salary <= (SELECT TOP 1 75000 AS avg_salary FROM departments AS d))'),
-    );
+    expect(sql).toEqual(`SELECT *
+FROM [users] AS [u]
+WHERE ([u].[salary] <= (SELECT TOP 1
+  75000 AS [avg_salary]
+FROM [departments] AS [d]))`);
   });
 
   test('WHERE != com subconsulta', () => {
@@ -234,7 +201,7 @@ WHERE
     const departments = dbContext.set<Department>('departments');
 
     // Act - Adicionando limit(1) na subconsulta
-    const query = users
+    const sql = users
       .whereNotEqual(
         u => u.departmentId,
         departments
@@ -245,11 +212,7 @@ WHERE
       .toQueryString();
 
     // Assert
-    expect(normalizeSQL(query)).toContain(
-      normalizeSQL(
-        "WHERE (u.departmentId != (SELECT TOP 1 d.id FROM departments AS d WHERE (d.name = 'HR')))",
-      ),
-    );
+    expect(sql).toEqual(``);
   });
 
   test('Consulta complexa com múltiplas subconsultas', () => {
@@ -259,7 +222,7 @@ WHERE
     const departments = dbContext.set<Department>('departments');
 
     // Act
-    const query = users
+    const sql = users
       .where(u => u.name.includes('John'))
       .whereIn(
         u => u.id,
@@ -276,19 +239,17 @@ WHERE
       .toQueryString();
 
     // Assert
-    expect(normalizeSQL(query)).toContain(
-      normalizeSQL(`SELECT *
+    expect(sql).toEqual(`SELECT *
 FROM [users] AS [u]
 WHERE ((([u].[name] LIKE CONCAT(N'%', N'John', N'%') AND [u].[id] IN ((SELECT
-  [o].[userId] AS [value]
+  [o].[userId]
 FROM [orders] AS [o]
 WHERE ([o].[amount] > 1000)))) AND NOT EXISTS ((SELECT
-  1 AS [value]
+  1
 FROM [orders] AS [o]
 WHERE ([o].[status] = N'canceled')))) AND ([u].[departmentId] = (SELECT TOP 1
-  [d].[id] AS [value]
+  [d].[id]
 FROM [departments] AS [d]
-WHERE ([d].[name] = N'Sales'))))`),
-    );
+WHERE ([d].[name] = N'Sales'))))`);
   });
 });

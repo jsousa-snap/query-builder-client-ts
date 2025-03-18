@@ -24,27 +24,27 @@ describe('Order By Queries', () => {
     const query = users.orderBy(u => u.name);
     const sql = query.toQueryString();
 
-    expect(normalizeSQL(sql)).toContain(
-      normalizeSQL('SELECT * FROM users AS u ORDER BY u.name ASC'),
-    );
+    expect(sql).toEqual(`SELECT *
+FROM [users] AS [u]
+ORDER BY [u].[name] ASC`);
   });
 
   test('Order by single column descending', () => {
     const query = users.orderBy(u => u.age, OrderDirection.DESC);
     const sql = query.toQueryString();
 
-    expect(normalizeSQL(sql)).toContain(
-      normalizeSQL('SELECT * FROM users AS u ORDER BY u.age DESC'),
-    );
+    expect(sql).toEqual(`SELECT *
+FROM [users] AS [u]
+ORDER BY [u].[age] DESC`);
   });
 
   test('Multiple order by columns', () => {
     const query = users.orderBy(u => u.age, OrderDirection.DESC).orderBy(u => u.name);
     const sql = query.toQueryString();
 
-    expect(normalizeSQL(sql)).toContain(
-      normalizeSQL('SELECT * FROM users AS u ORDER BY u.age DESC, u.name ASC'),
-    );
+    expect(sql).toEqual(`SELECT *
+FROM [users] AS [u]
+ORDER BY [u].[age] DESC, [u].[name] ASC`);
   });
 
   test('Order by with nested join', () => {
@@ -58,14 +58,10 @@ describe('Order By Queries', () => {
       .orderBy(joined => joined.order.amount, OrderDirection.DESC);
     const sql = query.toQueryString();
 
-    expect(normalizeSQL(sql)).toContain(
-      normalizeSQL(`
-        SELECT * 
-        FROM users AS u 
-        INNER JOIN orders AS o ON (u.id = o.userId) 
-        ORDER BY o.amount DESC
-      `),
-    );
+    expect(sql).toEqual(`SELECT *
+FROM [users] AS [u]
+  INNER JOIN [orders] AS [o] ON ([u].[id] = [o].[userId])
+ORDER BY [o].[amount] DESC`);
   });
 
   test('Order by with selection', () => {
@@ -78,26 +74,19 @@ describe('Order By Queries', () => {
 
     const sql = query.toQueryString();
 
-    expect(normalizeSQL(sql)).toContain(
-      normalizeSQL(`
-        SELECT u.id AS userId, u.name AS userName 
-        FROM users AS u 
-        ORDER BY u.name ASC
-      `),
-    );
+    expect(sql).toEqual(`SELECT
+  [u].[id] AS [userId], [u].[name] AS [userName]
+FROM [users] AS [u]
+ORDER BY [u].[name] ASC`);
   });
 
   test('Order by with where clause', () => {
     const query = users.where(u => u.age > 18).orderBy(u => u.name, OrderDirection.DESC);
     const sql = query.toQueryString();
 
-    expect(normalizeSQL(sql)).toContain(
-      normalizeSQL(`
-        SELECT * 
-        FROM users AS u 
-        WHERE (u.age > 18) 
-        ORDER BY u.name DESC
-      `),
-    );
+    expect(sql).toEqual(`SELECT *
+FROM [users] AS [u]
+WHERE ([u].[age] > 18)
+ORDER BY [u].[name] DESC`);
   });
 });

@@ -98,8 +98,8 @@ export class SqlServerGenerationVisitor implements IExpressionVisitor<string> {
    * @param identifier The identifier to escape
    * @returns The escaped identifier
    */
-  escapeIdentifier(identifier: string): string {
-    return identifier.replace(/]/g, ']]');
+  escapeIdentifier(identifier: string): string | null {
+    return identifier?.replace(/]/g, ']]');
   }
 
   /**
@@ -283,7 +283,6 @@ export class SqlServerGenerationVisitor implements IExpressionVisitor<string> {
   /**
    * Visits a select expression with proper formatting
    */
-  // The fix for the infinite recursion issue in the visitSelectExpression method
 
   visitSelectExpression(expr: SelectExpression): string {
     // If we're in a subquery, we should NOT create a new visitor instance
@@ -494,7 +493,10 @@ export class SqlServerGenerationVisitor implements IExpressionVisitor<string> {
    * Visits a projection expression
    */
   visitProjectionExpression(expr: ProjectionExpression): string {
-    // SQL Server usa colchetes para identificadores
+    if (!expr.getAlias()) {
+      return expr.getExpression().accept(this);
+    }
+
     return `${expr.getExpression().accept(this)} AS ${this.delimitIdentifier(expr.getAlias())}`;
   }
 
