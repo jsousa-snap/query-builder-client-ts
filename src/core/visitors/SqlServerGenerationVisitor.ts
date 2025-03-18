@@ -285,22 +285,6 @@ export class SqlServerGenerationVisitor implements IExpressionVisitor<string> {
    */
 
   visitSelectExpression(expr: SelectExpression): string {
-    // If we're in a subquery, we should NOT create a new visitor instance
-    // This is causing the infinite recursion
-
-    // Original problematic code:
-    // const subqueryOptions: SqlGenerationOptions = {
-    //   indentSize: this.indentSize,
-    //   useDelimitedIdentifiers: this.useDelimitedIdentifiers,
-    //   isSubquery: true,
-    // };
-    //
-    // if (this.isSubquery) {
-    //   const subqueryVisitor = new SqlServerGenerationVisitor(this.parameters, subqueryOptions);
-    //   return expr.accept(subqueryVisitor);  // This causes infinite recursion!
-    // }
-
-    // Fixed version:
     // Save current state
     const originalStringBuilder = [...this.sb];
     const originalIndentLevel = this.indentLevel;
@@ -309,12 +293,8 @@ export class SqlServerGenerationVisitor implements IExpressionVisitor<string> {
     this.sb = [];
     this.indentLevel = 0;
 
-    // Add parentheses for subqueries
-    if (this.isSubquery) {
-      this.append('(');
-    }
-
-    // Add SELECT clause
+    // Add SELECT clause - no parentheses here, that's the responsibility
+    // of the visitor that's using this SELECT (like ScalarSubqueryExpression)
     this.append('SELECT');
 
     // Verificar se temos LIMIT sem OFFSET - se sim, usar TOP
@@ -421,11 +401,6 @@ export class SqlServerGenerationVisitor implements IExpressionVisitor<string> {
       }
     }
 
-    // Close parentheses for subqueries
-    if (this.isSubquery) {
-      this.append(')');
-    }
-
     // Get the SQL result
     const sql = this.sb.join('');
 
@@ -442,17 +417,19 @@ export class SqlServerGenerationVisitor implements IExpressionVisitor<string> {
     // Save current state
     const wasSubquery = this.isSubquery;
 
-    // Set subquery flag
+    // Set subquery flag (this just affects formatting, not structure)
     this.isSubquery = true;
 
-    // Generate the subquery SQL
-    const subquerySql = expr.getQuery().accept(this);
+    try {
+      // Generate the subquery SQL
+      const subquerySql = expr.getQuery().accept(this);
 
-    // Restore original state
-    this.isSubquery = wasSubquery;
-
-    // Return the generated SQL
-    return subquerySql;
+      // The scalar subquery visitor is responsible for adding parentheses
+      return `(${subquerySql})`;
+    } finally {
+      // Always restore original state, even if an error occurs
+      this.isSubquery = wasSubquery;
+    }
   }
 
   /**
