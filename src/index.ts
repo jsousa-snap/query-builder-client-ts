@@ -29,7 +29,7 @@ export {
   ISelectExpression as SelectExpression,
   ITableExpression as TableExpression,
   IJoinExpression as JoinExpression,
-  IScalarSubqueryExpression as SubqueryExpression,
+  IScalarSubqueryExpression as ScalarSubqueryExpression,
   IProjectionExpression as ProjectionExpression,
   IParameterExpression as ParameterExpression,
 } from './core/expressions/Expression';

@@ -310,6 +310,10 @@ export class Queryable<T> {
     return newQueryable as any;
   }
 
+  /**
+   * Adds a SELECT clause to the query
+   * @param selector The selector function
+   */
   select<TResult>(selector: SelectorFunction<T, TResult>): Queryable<TResult> {
     // Salvar as projeções existentes que são subconsultas
     const existingSubqueries = this.projections.filter(p => {
@@ -324,18 +328,42 @@ export class Queryable<T> {
     // Criar um novo queryable com o novo tipo de resultado
     const newQueryable = this.cloneWithNewType<TResult>();
 
-    // Obter o texto da função seletora para análise
-    const selectorStr = selector.toString();
-
     try {
-      // Extrair os mapeamentos de propriedades usando o LambdaParser aprimorado
+      // Criar um LambdaParser com rastreamento de propriedades
       const lambdaParser = new LambdaParser(
         this.expressionBuilder,
         this.contextVariables,
         this.propertyTracker,
       );
 
-      // Analisar o seletor para extrair os mapeamentos de propriedades com informações de origem
+      // Analisar a string da função lambda em AST
+      const selectorStr = selector.toString();
+      const node = lambdaParser.parseLambda(selectorStr);
+
+      // Verificar se o selector é uma expressão simples (não é um objeto literal)
+      if (!lambdaParser.isObjectLiteral(node)) {
+        // É uma expressão simples (user => user.id ou _ => 1)
+        const expression = lambdaParser.processSimpleExpression(node, this.alias);
+
+        // Criar uma única projeção com alias "value"
+        newQueryable.projections = [this.expressionBuilder.createProjection(expression, 'value')];
+
+        // Se for um acesso de coluna, registrar no rastreador
+        if (expression instanceof ColumnExpression) {
+          newQueryable.propertyTracker.registerProperty(
+            'value',
+            expression.getTableAlias(),
+            expression.getColumnName(),
+          );
+        }
+
+        // Adicionar as subconsultas existentes de volta
+        newQueryable.projections.push(...existingSubqueries);
+
+        return newQueryable;
+      }
+
+      // Abordagem principal: usar o LambdaParser melhorado para objetos literais
       const propertyMappings = lambdaParser.parseSelectorEnhanced<T, TResult>(selector, this.alias);
 
       // Converter os mapeamentos para expressões de projeção
@@ -2526,6 +2554,263 @@ export class Queryable<T> {
     newQueryable.projections.push(this.expressionBuilder.createProjection(aggregateFunc, alias));
 
     return newQueryable;
+  }
+
+  // Adicionar à classe Queryable
+
+  /**
+   * Adiciona uma condição WHERE EXISTS com subconsulta
+   * @param subquery A subconsulta a ser usada na condição
+   *
+   * @example
+   * // Uso correto: sempre fornecer um select explícito
+   * users.whereExists(orders.where(o => o.userId === u.id).select(_ => 1))
+   */
+  whereExists<U>(subquery: Queryable<U>): Queryable<T> {
+    // Criar um novo queryable
+    const newQueryable = this.clone();
+
+    // Converter o Queryable em uma subconsulta
+    const selectExpr = subquery.toMetadata();
+    const subqueryExpr = this.expressionBuilder.createSubquery(selectExpr);
+
+    // Criar a expressão EXISTS
+    const existsExpr = this.expressionBuilder.createExistsSubquery(subqueryExpr);
+
+    // Se já existe uma cláusula where, fazer um AND com a nova
+    if (newQueryable.whereClause) {
+      newQueryable.whereClause = this.expressionBuilder.createAnd(
+        newQueryable.whereClause,
+        existsExpr,
+      );
+    } else {
+      newQueryable.whereClause = existsExpr;
+    }
+
+    return newQueryable;
+  }
+
+  /**
+   * Adiciona uma condição WHERE NOT EXISTS com subconsulta
+   * @param subquery A subconsulta a ser usada na condição
+   *
+   * @example
+   * // Uso correto: sempre fornecer um select explícito
+   * users.whereNotExists(orders.where(o => o.status === 'canceled').select(_ => 1))
+   */
+  whereNotExists<U>(subquery: Queryable<U>): Queryable<T> {
+    // Criar um novo queryable
+    const newQueryable = this.clone();
+
+    // Converter o Queryable em uma subconsulta
+    const selectExpr = subquery.toMetadata();
+    const subqueryExpr = this.expressionBuilder.createSubquery(selectExpr);
+
+    // Criar a expressão NOT EXISTS
+    const notExistsExpr = this.expressionBuilder.createNotExistsSubquery(subqueryExpr);
+
+    // Se já existe uma cláusula where, fazer um AND com a nova
+    if (newQueryable.whereClause) {
+      newQueryable.whereClause = this.expressionBuilder.createAnd(
+        newQueryable.whereClause,
+        notExistsExpr,
+      );
+    } else {
+      newQueryable.whereClause = notExistsExpr;
+    }
+
+    return newQueryable;
+  }
+
+  /**
+   * Adiciona uma condição WHERE IN com subconsulta
+   * @param selector Função para selecionar o campo a ser comparado
+   * @param subquery A subconsulta a ser usada na condição
+   *
+   * @example
+   * // Uso correto: a subconsulta deve retornar uma única coluna
+   * users.whereIn(u => u.id, orders.select(o => o.userId))
+   */
+  whereIn<U>(selector: (entity: T) => any, subquery: Queryable<U>): Queryable<T> {
+    // Criar um novo queryable
+    const newQueryable = this.clone();
+
+    // Extrair o nome da coluna do selector
+    const selectorStr = selector.toString();
+    const propertyInfo = this.resolvePropertyPath(selectorStr, this.alias);
+
+    // Criar expressão de coluna
+    const column = this.expressionBuilder.createColumn(
+      propertyInfo.columnName,
+      propertyInfo.tableAlias,
+    );
+
+    // Converter o Queryable em uma subconsulta
+    const selectExpr = subquery.toMetadata();
+
+    const subqueryExpr = this.expressionBuilder.createSubquery(selectExpr);
+
+    // Criar a expressão IN
+    const inExpr = this.expressionBuilder.createInSubquery(column, subqueryExpr);
+
+    // Se já existe uma cláusula where, fazer um AND com a nova
+    if (newQueryable.whereClause) {
+      newQueryable.whereClause = this.expressionBuilder.createAnd(newQueryable.whereClause, inExpr);
+    } else {
+      newQueryable.whereClause = inExpr;
+    }
+
+    return newQueryable;
+  }
+
+  /**
+   * Adiciona uma condição WHERE NOT IN com subconsulta
+   * @param selector Função para selecionar o campo a ser comparado
+   * @param subquery A subconsulta a ser usada na condição
+   *
+   * @example
+   * // Uso correto: a subconsulta deve retornar uma única coluna
+   * users.whereNotIn(u => u.id, orders.where(o => o.status === 'canceled').select(o => o.userId))
+   */
+  whereNotIn<U>(selector: (entity: T) => any, subquery: Queryable<U>): Queryable<T> {
+    // Criar um novo queryable
+    const newQueryable = this.clone();
+
+    // Extrair o nome da coluna do selector
+    const selectorStr = selector.toString();
+    const propertyInfo = this.resolvePropertyPath(selectorStr, this.alias);
+
+    // Criar expressão de coluna
+    const column = this.expressionBuilder.createColumn(
+      propertyInfo.columnName,
+      propertyInfo.tableAlias,
+    );
+
+    // Converter o Queryable em uma subconsulta
+    const selectExpr = subquery.toMetadata();
+    const subqueryExpr = this.expressionBuilder.createSubquery(selectExpr);
+
+    // Criar a expressão NOT IN
+    const notInExpr = this.expressionBuilder.createNotInSubquery(column, subqueryExpr);
+
+    // Se já existe uma cláusula where, fazer um AND com a nova
+    if (newQueryable.whereClause) {
+      newQueryable.whereClause = this.expressionBuilder.createAnd(
+        newQueryable.whereClause,
+        notInExpr,
+      );
+    } else {
+      newQueryable.whereClause = notInExpr;
+    }
+
+    return newQueryable;
+  }
+
+  /**
+   * Adiciona uma condição WHERE comparando com resultado de subconsulta
+   * @param selector Função para selecionar o campo a ser comparado
+   * @param operator Operador de comparação
+   * @param subquery A subconsulta a ser usada na condição
+   * @example
+   * ```
+   * // WHERE users.salary > (SELECT AVG(salary) FROM employees)
+   * users.whereCompareSubquery(
+   *   user => user.salary,
+   *   ExpressionType.GreaterThan,
+   *   employees.select(e => ({ avg: e.avg(e => e.salary) }))
+   * )
+   * ```
+   */
+  whereCompareSubquery<U>(
+    selector: (entity: T) => any,
+    operator: ExpressionType,
+    subquery: Queryable<U>,
+  ): Queryable<T> {
+    // Criar um novo queryable
+    const newQueryable = this.clone();
+
+    // Extrair o nome da coluna do selector
+    const selectorStr = selector.toString();
+    const propertyInfo = this.resolvePropertyPath(selectorStr, this.alias);
+
+    // Criar expressão de coluna
+    const column = this.expressionBuilder.createColumn(
+      propertyInfo.columnName,
+      propertyInfo.tableAlias,
+    );
+
+    // Converter o Queryable em uma subconsulta
+    const selectExpr = subquery.toMetadata();
+    const subqueryExpr = this.expressionBuilder.createSubquery(selectExpr);
+
+    // Criar a expressão de comparação
+    const compareExpr = this.expressionBuilder.createBinary(operator, column, subqueryExpr);
+
+    // Se já existe uma cláusula where, fazer um AND com a nova
+    if (newQueryable.whereClause) {
+      newQueryable.whereClause = this.expressionBuilder.createAnd(
+        newQueryable.whereClause,
+        compareExpr,
+      );
+    } else {
+      newQueryable.whereClause = compareExpr;
+    }
+
+    return newQueryable;
+  }
+
+  /**
+   * Adiciona uma condição WHERE = com subconsulta
+   * @param selector Função para selecionar o campo a ser comparado
+   * @param subquery A subconsulta a ser usada na condição
+   */
+  whereEqual<U>(selector: (entity: T) => any, subquery: Queryable<U>): Queryable<T> {
+    return this.whereCompareSubquery(selector, ExpressionType.Equal, subquery);
+  }
+
+  /**
+   * Adiciona uma condição WHERE != com subconsulta
+   * @param selector Função para selecionar o campo a ser comparado
+   * @param subquery A subconsulta a ser usada na condição
+   */
+  whereNotEqual<U>(selector: (entity: T) => any, subquery: Queryable<U>): Queryable<T> {
+    return this.whereCompareSubquery(selector, ExpressionType.NotEqual, subquery);
+  }
+
+  /**
+   * Adiciona uma condição WHERE > com subconsulta
+   * @param selector Função para selecionar o campo a ser comparado
+   * @param subquery A subconsulta a ser usada na condição
+   */
+  whereGreaterThan<U>(selector: (entity: T) => any, subquery: Queryable<U>): Queryable<T> {
+    return this.whereCompareSubquery(selector, ExpressionType.GreaterThan, subquery);
+  }
+
+  /**
+   * Adiciona uma condição WHERE >= com subconsulta
+   * @param selector Função para selecionar o campo a ser comparado
+   * @param subquery A subconsulta a ser usada na condição
+   */
+  whereGreaterThanOrEqual<U>(selector: (entity: T) => any, subquery: Queryable<U>): Queryable<T> {
+    return this.whereCompareSubquery(selector, ExpressionType.GreaterThanOrEqual, subquery);
+  }
+
+  /**
+   * Adiciona uma condição WHERE < com subconsulta
+   * @param selector Função para selecionar o campo a ser comparado
+   * @param subquery A subconsulta a ser usada na condição
+   */
+  whereLessThan<U>(selector: (entity: T) => any, subquery: Queryable<U>): Queryable<T> {
+    return this.whereCompareSubquery(selector, ExpressionType.LessThan, subquery);
+  }
+
+  /**
+   * Adiciona uma condição WHERE <= com subconsulta
+   * @param selector Função para selecionar o campo a ser comparado
+   * @param subquery A subconsulta a ser usada na condição
+   */
+  whereLessThanOrEqual<U>(selector: (entity: T) => any, subquery: Queryable<U>): Queryable<T> {
+    return this.whereCompareSubquery(selector, ExpressionType.LessThanOrEqual, subquery);
   }
 
   async toListAsync(): Promise<Record<string, any>[]> {

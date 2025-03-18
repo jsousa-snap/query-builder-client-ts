@@ -37,6 +37,8 @@ export class BinaryExpression extends Expression implements IBinaryExpression {
       ExpressionType.LessThanOrEqual,
       ExpressionType.And,
       ExpressionType.Or,
+      ExpressionType.In, // Novo operador para subconsultas
+      ExpressionType.NotIn, // Novo operador para subconsultas
     ];
 
     if (!validOperators.includes(type)) {

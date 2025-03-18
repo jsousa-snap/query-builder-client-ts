@@ -43,6 +43,18 @@ export class SqlGenerationVisitor implements IExpressionVisitor<string> {
     const right = expr.getRight().accept(this);
     const operator = this.getBinaryOperator(expr.getOperatorType());
 
+    // Caso especial para operadores IN e NOT IN com subconsulta
+    if (
+      expr.getOperatorType() === ExpressionType.In ||
+      expr.getOperatorType() === ExpressionType.NotIn
+    ) {
+      // Se o operando direito é uma subconsulta, remover os parênteses extras
+      if (expr.getRight() instanceof ScalarSubqueryExpression) {
+        return `${left} ${operator} (${right})`;
+      }
+      return `${left} ${operator} (${right})`;
+    }
+
     return `(${left} ${operator} ${right})`;
   }
 
@@ -60,6 +72,18 @@ export class SqlGenerationVisitor implements IExpressionVisitor<string> {
   visitUnaryExpression(expr: UnaryExpression): string {
     const operand = expr.getOperand().accept(this);
     const operator = this.getUnaryOperator(expr.getOperatorType());
+
+    // Caso especial para EXISTS e NOT EXISTS
+    if (
+      expr.getOperatorType() === ExpressionType.Exists ||
+      expr.getOperatorType() === ExpressionType.NotExists
+    ) {
+      // Se o operando é uma subconsulta, certificar-se de que tem os parênteses corretos
+      if (expr.getOperand() instanceof ScalarSubqueryExpression) {
+        return `${operator}(${operand})`;
+      }
+      return `${operator}(${operand})`;
+    }
 
     return `${operator}(${operand})`;
   }
@@ -117,6 +141,15 @@ export class SqlGenerationVisitor implements IExpressionVisitor<string> {
     // Build SELECT clause
     let sql = 'SELECT ';
 
+    // Verificar se temos LIMIT sem OFFSET - se sim, usar TOP
+    const limitValue = expr.getLimitValue();
+    const offsetValue = expr.getOffsetValue();
+
+    if (limitValue && !offsetValue) {
+      // Temos LIMIT sem OFFSET, usar TOP
+      sql += `TOP ${limitValue.accept(this)} `;
+    }
+
     if (expr.getIsDistinct()) {
       sql += 'DISTINCT ';
     }
@@ -164,15 +197,19 @@ export class SqlGenerationVisitor implements IExpressionVisitor<string> {
         .join(', ')}`;
     }
 
-    // Add LIMIT
-    const limitValue = expr.getLimitValue();
-    if (limitValue) {
-      sql += ` LIMIT ${limitValue.accept(this)}`;
-    }
-    // Add OFFSET
-    const offsetValue = expr.getOffsetValue();
+    // Add LIMIT/OFFSET apenas se temos OFFSET ou não usamos TOP
     if (offsetValue) {
+      // Com OFFSET, usar LIMIT normalmente
+      if (limitValue) {
+        sql += ` LIMIT ${limitValue.accept(this)}`;
+      } else {
+        // Se tiver OFFSET sem LIMIT, usar um valor grande
+        sql += ` LIMIT 2147483647`;
+      }
       sql += ` OFFSET ${offsetValue.accept(this)}`;
+    } else if (limitValue && !offsetValue && !sql.includes('TOP')) {
+      // Caso em que optamos por não usar TOP (não deveria acontecer, mas por precaução)
+      sql += ` LIMIT ${limitValue.accept(this)}`;
     }
 
     return sql;
@@ -264,6 +301,10 @@ export class SqlGenerationVisitor implements IExpressionVisitor<string> {
         return 'AND';
       case ExpressionType.Or:
         return 'OR';
+      case ExpressionType.In:
+        return 'IN';
+      case ExpressionType.NotIn:
+        return 'NOT IN';
       default:
         throw new Error(`Unsupported binary operator: ${ExpressionType[type]}`);
     }
@@ -278,6 +319,10 @@ export class SqlGenerationVisitor implements IExpressionVisitor<string> {
         return 'NOT ';
       case ExpressionType.Negate:
         return '-';
+      case ExpressionType.Exists:
+        return 'EXISTS ';
+      case ExpressionType.NotExists:
+        return 'NOT EXISTS ';
       default:
         throw new Error(`Unsupported unary operator: ${ExpressionType[type]}`);
     }

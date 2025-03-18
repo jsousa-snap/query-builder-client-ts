@@ -158,8 +158,23 @@ export class LambdaParser {
     const fnString = selector.toString();
     this.extractParameterName(fnString);
 
+    const result = new Map<string, PropertyMapping>();
+
     // Analisar o corpo da função em uma AST
     const node = this.parseLambda(fnString);
+
+    if (ts.isReturnStatement(node) && node.expression && ts.isLiteralExpression(node.expression)) {
+      const expression = this.processNode(node.expression, '');
+      result.set('', {
+        propertyName: '',
+        expression,
+        tableAlias: '',
+        columnName: '',
+        propertyPath: [], // Remover o parâmetro inicial
+        isComplex: false,
+      });
+      return result;
+    }
 
     // Encontrar o literal de objeto no corpo da função
     let objectLiteral = this.findObjectLiteral(node);
@@ -167,8 +182,6 @@ export class LambdaParser {
     if (!objectLiteral) {
       throw new Error('Esperava-se uma expressão literal de objeto na função select');
     }
-
-    const result = new Map<string, PropertyMapping>();
 
     // Processar cada propriedade no literal de objeto
     for (const property of objectLiteral.properties) {
@@ -329,8 +342,12 @@ export class LambdaParser {
   /**
    * Analisa uma string de função lambda em uma AST
    * @param fnString A string da função
+   * @returns O nó AST resultante
    */
-  private parseLambda(fnString: string): ts.Node {
+  parseLambda(fnString: string): ts.Node {
+    // Esta função já existe no código original, mas a tornei pública
+    // para que possa ser chamada pelo método select
+
     // Determinar se esta é uma função de seta ou expressão de função
     const isArrow = fnString.includes('=>');
 
@@ -355,6 +372,9 @@ export class LambdaParser {
       const bodyEnd = fnString.lastIndexOf('}');
       functionBody = fnString.substring(bodyStart, bodyEnd).trim();
     }
+
+    // Extrair o nome do parâmetro
+    this.extractParameterName(fnString);
 
     // Criar um arquivo fonte para análise
     const sourceFile = ts.createSourceFile(
@@ -1269,5 +1289,171 @@ export class LambdaParser {
 
     // For other node types
     return this.processNode(node, defaultTableAlias);
+  }
+
+  /**
+   * Verifica se um nó AST representa um literal de objeto
+   * @param node O nó AST a ser verificado
+   * @returns true se o nó for um literal de objeto, false caso contrário
+   */
+  isObjectLiteral(node: ts.Node): boolean {
+    // Verificar o nó diretamente
+    if (ts.isObjectLiteralExpression(node)) {
+      return true;
+    }
+
+    // Verificar o corpo de uma função de seta
+    if (ts.isArrowFunction(node) && node.body && ts.isObjectLiteralExpression(node.body)) {
+      return true;
+    }
+
+    // Verificar expressão em um statement
+    if (ts.isExpressionStatement(node) && ts.isObjectLiteralExpression(node.expression)) {
+      return true;
+    }
+
+    // Verificar o corpo de um return statement
+    if (
+      ts.isReturnStatement(node) &&
+      node.expression &&
+      ts.isObjectLiteralExpression(node.expression)
+    ) {
+      return true;
+    }
+
+    // Verificar dentro de parênteses
+    if (ts.isParenthesizedExpression(node) && ts.isObjectLiteralExpression(node.expression)) {
+      return true;
+    }
+
+    // Buscar recursivamente em filhos
+    let found = false;
+    node.forEachChild(child => {
+      if (!found) {
+        found = this.isObjectLiteral(child);
+      }
+    });
+
+    return found;
+  }
+
+  /**
+   * Processa uma expressão simples (não-objeto) em uma AST
+   * @param node O nó AST a ser processado
+   * @param tableAlias O alias padrão da tabela
+   * @returns Uma expressão adequada para a AST
+   */
+  processSimpleExpression(node: ts.Node, tableAlias: string): Expression {
+    // Processar várias formas possíveis de expressão
+
+    // Se é um bloco de função, encontrar o statement relevante
+    if (ts.isBlock(node) && node.statements.length > 0) {
+      // Buscar o primeiro return statement, ou o último statement
+      const returnStmt = node.statements.find(ts.isReturnStatement);
+      if (returnStmt && returnStmt.expression) {
+        return this.processSimpleExpression(returnStmt.expression, tableAlias);
+      }
+
+      // Se não houver return, processar o último statement
+      return this.processSimpleExpression(node.statements[node.statements.length - 1], tableAlias);
+    }
+
+    // Se é um return statement, processar a expressão
+    if (ts.isReturnStatement(node) && node.expression) {
+      return this.processSimpleExpression(node.expression, tableAlias);
+    }
+
+    // Se é um statement de expressão, processar a expressão
+    if (ts.isExpressionStatement(node)) {
+      return this.processSimpleExpression(node.expression, tableAlias);
+    }
+
+    // Se é uma função de seta com corpo de expressão, processar o corpo
+    if (ts.isArrowFunction(node) && !ts.isBlock(node.body)) {
+      return this.processSimpleExpression(node.body, tableAlias);
+    }
+
+    // Processar tipos específicos de expressões
+
+    // 1. Acesso a propriedade (user.id, joined.order.amount)
+    if (ts.isPropertyAccessExpression(node)) {
+      // Verificar se é uma propriedade aninhada
+      const propPath = this.extractPropertyPath(node);
+
+      if (propPath.length > 0) {
+        // Verificar propriedades aninhadas (ex: joined.order.amount)
+        if (propPath.length >= 3 && this.propertyTracker) {
+          const objectName = propPath[1]; // "order"
+          const propertyName = propPath[propPath.length - 1]; // "amount"
+
+          // Tentar encontrar a tabela correta no rastreador
+
+          // 1. Verificar registro direto do objeto
+          const objectSource = this.propertyTracker.getPropertySource(objectName);
+          if (objectSource) {
+            return this.builder.createColumn(propertyName, objectSource.tableAlias);
+          }
+
+          // 2. Verificar wildcard para este objeto
+          const wildcardKey = `${objectName}.*`;
+          const wildcardSource = this.propertyTracker.getPropertySource(wildcardKey);
+          if (wildcardSource) {
+            return this.builder.createColumn(propertyName, wildcardSource.tableAlias);
+          }
+
+          // 3. Verificar correspondência com aliases de tabela
+          for (const alias of this.propertyTracker.getTableAliases()) {
+            // Correspondência exata ou primeira letra
+            if (
+              alias === objectName ||
+              (objectName.length > 0 && alias.toLowerCase() === objectName[0].toLowerCase())
+            ) {
+              return this.builder.createColumn(propertyName, alias);
+            }
+          }
+        }
+
+        // Para acesso direto a uma coluna (ex: user.id)
+        if (propPath.length === 2 && propPath[0] === this.parameterName) {
+          return this.builder.createColumn(propPath[1], tableAlias);
+        }
+      }
+
+      // Fallback para acesso a propriedade não reconhecido
+      return this.processPropertyAccess(node, tableAlias);
+    }
+
+    // 2. Constantes
+    if (ts.isLiteralExpression(node)) {
+      return this.processLiteral(node);
+    }
+
+    // 3. Identificadores (variáveis, parâmetros)
+    if (ts.isIdentifier(node)) {
+      return this.processIdentifier(node, tableAlias);
+    }
+
+    // 4. Expressões binárias (a + b, a > b)
+    if (ts.isBinaryExpression(node)) {
+      return this.processBinaryExpression(node, tableAlias);
+    }
+
+    // 5. Chamadas de função (count(), sum())
+    if (ts.isCallExpression(node)) {
+      return this.processCallExpression(node, tableAlias);
+    }
+
+    // 6. Expressões unárias (NOT a, -b)
+    if (ts.isPrefixUnaryExpression(node)) {
+      return this.processPrefixUnaryExpression(node, tableAlias);
+    }
+
+    // 7. Expressões entre parênteses
+    if (ts.isParenthesizedExpression(node)) {
+      return this.processSimpleExpression(node.expression, tableAlias);
+    }
+
+    // Para outros tipos, delegar para o método processNode genérico
+    return this.processNode(node, tableAlias);
   }
 }

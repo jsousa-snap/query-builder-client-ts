@@ -1,6 +1,7 @@
 import { Queryable } from '../query/Queryable';
 import { JoinType } from '../expressions/JoinExpression';
 import { IDatabaseProvider, OrderDirection } from '../query/Types';
+import { ExpressionType } from '../expressions/Expression';
 
 /**
  * Represents a database table or view
@@ -262,6 +263,110 @@ export class DbSet<T> {
    */
   having(predicate: (entity: any) => boolean): Queryable<T> {
     return this.query().having(predicate);
+  }
+
+  // Adicionar à classe DbSet em src/core/context/DbSet.ts
+
+  /**
+   * Adiciona uma condição WHERE IN com subconsulta
+   * @param selector Função para selecionar o campo a ser comparado
+   * @param subquery A subconsulta a ser usada na condição
+   */
+  whereIn<U>(selector: (entity: T) => any, subquery: Queryable<U>): Queryable<T> {
+    return this.query().whereIn(selector, subquery);
+  }
+
+  /**
+   * Adiciona uma condição WHERE NOT IN com subconsulta
+   * @param selector Função para selecionar o campo a ser comparado
+   * @param subquery A subconsulta a ser usada na condição
+   */
+  whereNotIn<U>(selector: (entity: T) => any, subquery: Queryable<U>): Queryable<T> {
+    return this.query().whereNotIn(selector, subquery);
+  }
+
+  /**
+   * Adiciona uma condição WHERE EXISTS com subconsulta
+   * @param subquery A subconsulta a ser usada na condição
+   */
+  whereExists<U>(subquery: Queryable<U>): Queryable<T> {
+    return this.query().whereExists(subquery);
+  }
+
+  /**
+   * Adiciona uma condição WHERE NOT EXISTS com subconsulta
+   * @param subquery A subconsulta a ser usada na condição
+   */
+  whereNotExists<U>(subquery: Queryable<U>): Queryable<T> {
+    return this.query().whereNotExists(subquery);
+  }
+
+  /**
+   * Adiciona uma condição WHERE comparando com resultado de subconsulta
+   * @param selector Função para selecionar o campo a ser comparado
+   * @param operator Operador de comparação
+   * @param subquery A subconsulta a ser usada na condição
+   */
+  whereCompareSubquery<U>(
+    selector: (entity: T) => any,
+    operator: ExpressionType,
+    subquery: Queryable<U>,
+  ): Queryable<T> {
+    return this.query().whereCompareSubquery(selector, operator, subquery);
+  }
+
+  /**
+   * Adiciona uma condição WHERE = com subconsulta
+   * @param selector Função para selecionar o campo a ser comparado
+   * @param subquery A subconsulta a ser usada na condição
+   */
+  whereEqual<U>(selector: (entity: T) => any, subquery: Queryable<U>): Queryable<T> {
+    return this.query().whereEqual(selector, subquery);
+  }
+
+  /**
+   * Adiciona uma condição WHERE != com subconsulta
+   * @param selector Função para selecionar o campo a ser comparado
+   * @param subquery A subconsulta a ser usada na condição
+   */
+  whereNotEqual<U>(selector: (entity: T) => any, subquery: Queryable<U>): Queryable<T> {
+    return this.query().whereNotEqual(selector, subquery);
+  }
+
+  /**
+   * Adiciona uma condição WHERE > com subconsulta
+   * @param selector Função para selecionar o campo a ser comparado
+   * @param subquery A subconsulta a ser usada na condição
+   */
+  whereGreaterThan<U>(selector: (entity: T) => any, subquery: Queryable<U>): Queryable<T> {
+    return this.query().whereGreaterThan(selector, subquery);
+  }
+
+  /**
+   * Adiciona uma condição WHERE >= com subconsulta
+   * @param selector Função para selecionar o campo a ser comparado
+   * @param subquery A subconsulta a ser usada na condição
+   */
+  whereGreaterThanOrEqual<U>(selector: (entity: T) => any, subquery: Queryable<U>): Queryable<T> {
+    return this.query().whereGreaterThanOrEqual(selector, subquery);
+  }
+
+  /**
+   * Adiciona uma condição WHERE < com subconsulta
+   * @param selector Função para selecionar o campo a ser comparado
+   * @param subquery A subconsulta a ser usada na condição
+   */
+  whereLessThan<U>(selector: (entity: T) => any, subquery: Queryable<U>): Queryable<T> {
+    return this.query().whereLessThan(selector, subquery);
+  }
+
+  /**
+   * Adiciona uma condição WHERE <= com subconsulta
+   * @param selector Função para selecionar o campo a ser comparado
+   * @param subquery A subconsulta a ser usada na condição
+   */
+  whereLessThanOrEqual<U>(selector: (entity: T) => any, subquery: Queryable<U>): Queryable<T> {
+    return this.query().whereLessThanOrEqual(selector, subquery);
   }
 
   /**

@@ -237,4 +237,32 @@ export class ExpressionBuilder {
   createNot(operand: Expression): UnaryExpression {
     return this.createUnary(ExpressionType.Not, operand);
   }
+
+  /**
+   * Cria uma expressão IN com uma subconsulta
+   */
+  createInSubquery(column: Expression, subquery: ScalarSubqueryExpression): BinaryExpression {
+    return this.createBinary(ExpressionType.In, column, subquery);
+  }
+
+  /**
+   * Cria uma expressão NOT IN com uma subconsulta
+   */
+  createNotInSubquery(column: Expression, subquery: ScalarSubqueryExpression): BinaryExpression {
+    return this.createBinary(ExpressionType.NotIn, column, subquery);
+  }
+
+  /**
+   * Cria uma expressão EXISTS com uma subconsulta
+   */
+  createExistsSubquery(subquery: ScalarSubqueryExpression): UnaryExpression {
+    return this.createUnary(ExpressionType.Exists, subquery);
+  }
+
+  /**
+   * Cria uma expressão NOT EXISTS com uma subconsulta
+   */
+  createNotExistsSubquery(subquery: ScalarSubqueryExpression): UnaryExpression {
+    return this.createUnary(ExpressionType.NotExists, subquery);
+  }
 }

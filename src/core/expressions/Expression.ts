@@ -68,6 +68,12 @@ export enum ExpressionType {
   Join,
   Subquery,
   Projection,
+
+  // Operadores adicionais para subconsultas
+  In,
+  NotIn,
+  Exists,
+  NotExists,
 }
 
 export interface IParentColumnExpression extends Expression {

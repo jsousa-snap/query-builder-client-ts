@@ -22,7 +22,12 @@ export class UnaryExpression extends Expression implements IUnaryExpression {
    * Validates that the operator type is a unary operator
    */
   private validateOperatorType(type: ExpressionType): void {
-    const validOperators = [ExpressionType.Not, ExpressionType.Negate];
+    const validOperators = [
+      ExpressionType.Not,
+      ExpressionType.Negate,
+      ExpressionType.Exists, // Novo operador para subconsultas
+      ExpressionType.NotExists, // Novo operador para subconsultas
+    ];
 
     if (!validOperators.includes(type)) {
       throw new Error(`Invalid unary operator type: ${ExpressionType[type]}`);
