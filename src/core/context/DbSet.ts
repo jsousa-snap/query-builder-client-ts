@@ -1,4 +1,3 @@
-// src/core/context/DbSet.ts
 import { Queryable } from '../query/Queryable';
 import { JoinType } from '../expressions/JoinExpression';
 import { IDatabaseProvider, OrderDirection } from '../query/Types';
@@ -155,6 +154,114 @@ export class DbSet<T> {
    */
   avg<TResult>(selector: (entity: T) => any): Queryable<TResult> {
     return this.query().avg(selector);
+  }
+
+  /**
+   * Creates a queryable with a HAVING clause using COUNT
+   * @param predicate A function that takes the count value and returns a boolean condition
+   */
+  havingCount(predicate: (value: number) => boolean): Queryable<T> {
+    return this.query().havingCount(predicate);
+  }
+
+  /**
+   * Creates a queryable with a HAVING clause using AVG
+   * @param selector Function to select the column to average
+   * @param predicate A function that takes the average value and returns a boolean condition
+   */
+  havingAvg(selector: (entity: T) => any, predicate: (value: number) => boolean): Queryable<T> {
+    return this.query().havingAvg(selector, predicate);
+  }
+
+  /**
+   * Creates a queryable with a HAVING clause using SUM
+   * @param selector Function to select the column to sum
+   * @param predicate A function that takes the sum value and returns a boolean condition
+   */
+  havingSum(selector: (entity: T) => any, predicate: (value: number) => boolean): Queryable<T> {
+    return this.query().havingSum(selector, predicate);
+  }
+
+  /**
+   * Creates a queryable with a HAVING clause using MIN
+   * @param selector Function to select the column to find the minimum value
+   * @param predicate A function that takes the min value and returns a boolean condition
+   */
+  havingMin(selector: (entity: T) => any, predicate: (value: number) => boolean): Queryable<T> {
+    return this.query().havingMin(selector, predicate);
+  }
+
+  /**
+   * Creates a queryable with a HAVING clause using MAX
+   * @param selector Function to select the column to find the maximum value
+   * @param predicate A function that takes the max value and returns a boolean condition
+   */
+  havingMax(selector: (entity: T) => any, predicate: (value: number) => boolean): Queryable<T> {
+    return this.query().havingMax(selector, predicate);
+  }
+
+  /**
+   * Creates a queryable with an ORDER BY clause using COUNT(*)
+   * @param direction The sort direction
+   */
+  orderByCount(direction: OrderDirection = OrderDirection.ASC): Queryable<T> {
+    return this.query().orderByCount(direction);
+  }
+
+  /**
+   * Creates a queryable with an ORDER BY clause using AVG
+   * @param selector Function to select the column to average
+   * @param direction The sort direction
+   */
+  orderByAvg(
+    selector: (entity: T) => any,
+    direction: OrderDirection = OrderDirection.ASC,
+  ): Queryable<T> {
+    return this.query().orderByAvg(selector, direction);
+  }
+
+  /**
+   * Creates a queryable with an ORDER BY clause using SUM
+   * @param selector Function to select the column to sum
+   * @param direction The sort direction
+   */
+  orderBySum(
+    selector: (entity: T) => any,
+    direction: OrderDirection = OrderDirection.ASC,
+  ): Queryable<T> {
+    return this.query().orderBySum(selector, direction);
+  }
+
+  /**
+   * Creates a queryable with an ORDER BY clause using MIN
+   * @param selector Function to select the column to find the minimum value
+   * @param direction The sort direction
+   */
+  orderByMin(
+    selector: (entity: T) => any,
+    direction: OrderDirection = OrderDirection.ASC,
+  ): Queryable<T> {
+    return this.query().orderByMin(selector, direction);
+  }
+
+  /**
+   * Creates a queryable with an ORDER BY clause using MAX
+   * @param selector Function to select the column to find the maximum value
+   * @param direction The sort direction
+   */
+  orderByMax(
+    selector: (entity: T) => any,
+    direction: OrderDirection = OrderDirection.ASC,
+  ): Queryable<T> {
+    return this.query().orderByMax(selector, direction);
+  }
+
+  /**
+   * Creates a queryable with a standard HAVING clause
+   * @param predicate The predicate function
+   */
+  having(predicate: (entity: any) => boolean): Queryable<T> {
+    return this.query().having(predicate);
   }
 
   /**

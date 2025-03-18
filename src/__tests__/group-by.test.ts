@@ -2,7 +2,7 @@ import { DbContext } from '../core/context/DbContext';
 import { normalizeSQL } from './common/test-utils';
 import { User, Order } from './common/models';
 import { DbSet } from '../core/context/DbSet';
-import { IDatabaseProvider } from '../core/query/Types';
+import { IDatabaseProvider, OrderDirection } from '../core/query/Types';
 
 const mockDatabaseProvider: IDatabaseProvider = {
   queryAsync: jest.fn().mockResolvedValue([{ id: 1, name: 'Alice' }]),
@@ -108,47 +108,56 @@ describe('Group By Queries', () => {
     );
   });
 
-  //   test('Group by with complex having condition', () => {
-  //     const query = users
-  //       .groupBy(u => [u.age])
-  //       .having(g => g.count > 5 && g.averageAge > 25)
-  //       .select(g => ({
-  //         age: g.age,
-  //         count: users.count(),
-  //         averageAge: users.avg(u => u.age),
-  //       }));
-  //     const sql = query.toQueryString();
+  test('Group by with complex having condition', () => {
+    const query = users
+      .groupBy(u => [u.age])
+      .havingCount(count => count > 5)
+      .havingAvg(
+        g => g.age,
+        avg => avg > 25,
+      )
+      .select(g => ({
+        age: g.age,
+      }))
+      .avg(g => g.age, 'averageAge')
+      .count();
+    const sql = query.toQueryString();
 
-  //     expect(normalizeSQL(sql)).toContain(
-  //       normalizeSQL(`
-  //         SELECT u.age AS age,
-  //                COUNT(*) AS count,
-  //                AVG(u.age) AS averageAge
-  //         FROM users AS u
-  //         GROUP BY u.age
-  //         HAVING ((COUNT(*) > 5) AND (AVG(u.age) > 25))
-  //       `),
-  //     );
-  //   });
+    expect(normalizeSQL(sql)).toContain(
+      normalizeSQL(`
+        SELECT
+  u.age AS age,
+  AVG(u.age) AS averageAge,
+  COUNT(*) AS count
+FROM users AS u
+GROUP BY
+  u.age
+HAVING
+  ((COUNT(*) > 5) AND (AVG(u.age) > 25))`),
+    );
+  });
 
-  //   test('Group by with order by', () => {
-  //     const query = users
-  //       .groupBy(u => [u.age])
-  //       .orderBy(g => g.count, OrderDirection.DESC)
-  //       .select(g => ({
-  //         age: g.age,
-  //         count: users.count(),
-  //       }));
-  //     const sql = query.toQueryString();
+  test('Group by with order by', () => {
+    const query = users
+      .groupBy(u => [u.age])
+      .select(g => ({
+        age: g.age,
+      }))
+      .orderByCount()
+      .count();
+    const sql = query.toQueryString();
 
-  //     expect(normalizeSQL(sql)).toContain(
-  //       normalizeSQL(`
-  //         SELECT u.age AS age,
-  //                COUNT(*) AS count
-  //         FROM users AS u
-  //         GROUP BY u.age
-  //         ORDER BY count DESC
-  //       `),
-  //     );
-  //   });
+    expect(normalizeSQL(sql)).toContain(
+      normalizeSQL(`
+SELECT
+  u.age AS age,
+  COUNT(*) AS count
+FROM users AS u
+GROUP BY
+  u.age
+ORDER BY
+  COUNT(*) ASC
+        `),
+    );
+  });
 });

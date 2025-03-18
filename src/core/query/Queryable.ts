@@ -168,14 +168,6 @@ export class Queryable<T> {
    * @param subquerySelector Seletor para a coluna da subconsulta
    * @param subqueryBuilder Função que modifica a subconsulta
    */
-  /**
-   * Adiciona uma subconsulta à seleção
-   * @param propertyName Nome da propriedade para o resultado da subconsulta
-   * @param subquerySource DbSet fonte para a subconsulta
-   * @param parentSelector Seletor para a coluna da consulta pai
-   * @param subquerySelector Seletor para a coluna da subconsulta
-   * @param subqueryBuilder Função que modifica a subconsulta
-   */
   withSubquery<U, TResult>(
     propertyName: string,
     subquerySource: DbSet<U>,
@@ -805,6 +797,233 @@ export class Queryable<T> {
   }
 
   /**
+   * Ordena os resultados pela contagem de registros em cada grupo
+   * @param direction Direção da ordenação (ASC ou DESC)
+   */
+  orderByCount<TResult = T>(direction: OrderDirection = OrderDirection.ASC): Queryable<T> {
+    // Criar um novo queryable
+    const newQueryable = this.clone();
+
+    // Criar a expressão COUNT(*)
+    const countExpr = this.expressionBuilder.createCount(null);
+
+    // Criar a expressão de ordenação
+    const orderByExpr = this.expressionBuilder.createOrderBy(
+      countExpr,
+      direction === OrderDirection.ASC,
+    );
+
+    // Adicionar à lista de ordenações
+    newQueryable.orderByColumns.push(orderByExpr);
+
+    return newQueryable;
+  }
+
+  /**
+   * Ordena os resultados pela média de valores em uma coluna
+   * @param selector Função para selecionar a coluna
+   * @param direction Direção da ordenação (ASC ou DESC)
+   */
+  orderByAvg<R = T>(
+    selector: AggregateSelector<T>,
+    direction: OrderDirection = OrderDirection.ASC,
+  ): Queryable<T> {
+    // Criar um novo queryable
+    const newQueryable = this.clone();
+
+    // Extrair a propriedade do seletor
+    const selectorStr = selector.toString();
+    const propMatch = selectorStr.match(/[gs]\.([a-zA-Z0-9_]+)(?:\.|$)/);
+
+    if (!propMatch || !propMatch[1]) {
+      throw new Error(`Não foi possível extrair a propriedade do seletor: ${selectorStr}`);
+    }
+
+    const propName = propMatch[1];
+    let tableAlias = this.alias;
+    let columnName = propName;
+
+    // Determinar a tabela e coluna corretas
+    if (this.propertyTracker) {
+      const propSource = this.propertyTracker.getPropertySource(propName);
+      if (propSource) {
+        tableAlias = propSource.tableAlias;
+        columnName = propSource.columnName !== '*' ? propSource.columnName : propName;
+      }
+    }
+
+    // Criar a expressão de coluna
+    const column = this.expressionBuilder.createColumn(columnName, tableAlias);
+
+    // Criar a expressão AVG
+    const avgExpr = this.expressionBuilder.createAvg(column);
+
+    // Criar a expressão de ordenação
+    const orderByExpr = this.expressionBuilder.createOrderBy(
+      avgExpr,
+      direction === OrderDirection.ASC,
+    );
+
+    // Adicionar à lista de ordenações
+    newQueryable.orderByColumns.push(orderByExpr);
+
+    return newQueryable;
+  }
+
+  /**
+   * Ordena os resultados pela soma de valores em uma coluna
+   * @param selector Função para selecionar a coluna
+   * @param direction Direção da ordenação (ASC ou DESC)
+   */
+  orderBySum<R = T>(
+    selector: AggregateSelector<T>,
+    direction: OrderDirection = OrderDirection.ASC,
+  ): Queryable<T> {
+    // Criar um novo queryable
+    const newQueryable = this.clone();
+
+    // Extrair a propriedade do seletor
+    const selectorStr = selector.toString();
+    const propMatch = selectorStr.match(/[gs]\.([a-zA-Z0-9_]+)(?:\.|$)/);
+
+    if (!propMatch || !propMatch[1]) {
+      throw new Error(`Não foi possível extrair a propriedade do seletor: ${selectorStr}`);
+    }
+
+    const propName = propMatch[1];
+    let tableAlias = this.alias;
+    let columnName = propName;
+
+    // Determinar a tabela e coluna corretas
+    if (this.propertyTracker) {
+      const propSource = this.propertyTracker.getPropertySource(propName);
+      if (propSource) {
+        tableAlias = propSource.tableAlias;
+        columnName = propSource.columnName !== '*' ? propSource.columnName : propName;
+      }
+    }
+
+    // Criar a expressão de coluna
+    const column = this.expressionBuilder.createColumn(columnName, tableAlias);
+
+    // Criar a expressão SUM
+    const sumExpr = this.expressionBuilder.createSum(column);
+
+    // Criar a expressão de ordenação
+    const orderByExpr = this.expressionBuilder.createOrderBy(
+      sumExpr,
+      direction === OrderDirection.ASC,
+    );
+
+    // Adicionar à lista de ordenações
+    newQueryable.orderByColumns.push(orderByExpr);
+
+    return newQueryable;
+  }
+
+  /**
+   * Ordena os resultados pelo valor mínimo em uma coluna
+   * @param selector Função para selecionar a coluna
+   * @param direction Direção da ordenação (ASC ou DESC)
+   */
+  orderByMin<R = T>(
+    selector: AggregateSelector<T>,
+    direction: OrderDirection = OrderDirection.ASC,
+  ): Queryable<T> {
+    // Criar um novo queryable
+    const newQueryable = this.clone();
+
+    // Extrair a propriedade do seletor
+    const selectorStr = selector.toString();
+    const propMatch = selectorStr.match(/[gs]\.([a-zA-Z0-9_]+)(?:\.|$)/);
+
+    if (!propMatch || !propMatch[1]) {
+      throw new Error(`Não foi possível extrair a propriedade do seletor: ${selectorStr}`);
+    }
+
+    const propName = propMatch[1];
+    let tableAlias = this.alias;
+    let columnName = propName;
+
+    // Determinar a tabela e coluna corretas
+    if (this.propertyTracker) {
+      const propSource = this.propertyTracker.getPropertySource(propName);
+      if (propSource) {
+        tableAlias = propSource.tableAlias;
+        columnName = propSource.columnName !== '*' ? propSource.columnName : propName;
+      }
+    }
+
+    // Criar a expressão de coluna
+    const column = this.expressionBuilder.createColumn(columnName, tableAlias);
+
+    // Criar a expressão MIN
+    const minExpr = this.expressionBuilder.createMin(column);
+
+    // Criar a expressão de ordenação
+    const orderByExpr = this.expressionBuilder.createOrderBy(
+      minExpr,
+      direction === OrderDirection.ASC,
+    );
+
+    // Adicionar à lista de ordenações
+    newQueryable.orderByColumns.push(orderByExpr);
+
+    return newQueryable;
+  }
+
+  /**
+   * Ordena os resultados pelo valor máximo em uma coluna
+   * @param selector Função para selecionar a coluna
+   * @param direction Direção da ordenação (ASC ou DESC)
+   */
+  orderByMax<R = T>(
+    selector: AggregateSelector<T>,
+    direction: OrderDirection = OrderDirection.ASC,
+  ): Queryable<T> {
+    // Criar um novo queryable
+    const newQueryable = this.clone();
+
+    // Extrair a propriedade do seletor
+    const selectorStr = selector.toString();
+    const propMatch = selectorStr.match(/[gs]\.([a-zA-Z0-9_]+)(?:\.|$)/);
+
+    if (!propMatch || !propMatch[1]) {
+      throw new Error(`Não foi possível extrair a propriedade do seletor: ${selectorStr}`);
+    }
+
+    const propName = propMatch[1];
+    let tableAlias = this.alias;
+    let columnName = propName;
+
+    // Determinar a tabela e coluna corretas
+    if (this.propertyTracker) {
+      const propSource = this.propertyTracker.getPropertySource(propName);
+      if (propSource) {
+        tableAlias = propSource.tableAlias;
+        columnName = propSource.columnName !== '*' ? propSource.columnName : propName;
+      }
+    }
+
+    // Criar a expressão de coluna
+    const column = this.expressionBuilder.createColumn(columnName, tableAlias);
+
+    // Criar a expressão MAX
+    const maxExpr = this.expressionBuilder.createMax(column);
+
+    // Criar a expressão de ordenação
+    const orderByExpr = this.expressionBuilder.createOrderBy(
+      maxExpr,
+      direction === OrderDirection.ASC,
+    );
+
+    // Adicionar à lista de ordenações
+    newQueryable.orderByColumns.push(orderByExpr);
+
+    return newQueryable;
+  }
+
+  /**
    * Adds a GROUP BY clause to the query
    * @param selector Function to select the grouping fields
    */
@@ -974,7 +1193,105 @@ export class Queryable<T> {
       return newQueryable;
     }
 
-    // If not a recognized aggregate pattern, try normal parsing
+    // Check for direct column comparison patterns (g.age > 25)
+    const columnPattern = /(\w+)\.(\w+)\s*([><=!]+)\s*(\d+)/i;
+    const columnMatch = predicateStr.match(columnPattern);
+
+    // Check if we're in a GROUP BY context
+    const hasGroupBy = this.groupByColumns.length > 0;
+
+    if (hasGroupBy && columnMatch) {
+      // We found a simple column comparison pattern in a GROUP BY context
+      const [_, paramName, columnName, operator, value] = columnMatch;
+
+      // Map the operator string to an expression type
+      let exprType: ExpressionType;
+      switch (operator) {
+        case '>':
+          exprType = ExpressionType.GreaterThan;
+          break;
+        case '>=':
+          exprType = ExpressionType.GreaterThanOrEqual;
+          break;
+        case '<':
+          exprType = ExpressionType.LessThan;
+          break;
+        case '<=':
+          exprType = ExpressionType.LessThanOrEqual;
+          break;
+        case '=':
+        case '==':
+        case '===':
+          exprType = ExpressionType.Equal;
+          break;
+        case '!=':
+        case '!==':
+          exprType = ExpressionType.NotEqual;
+          break;
+        default:
+          throw new Error(`Unsupported operator: ${operator}`);
+      }
+
+      // Find the column in group by or projections
+      let tableAlias = this.alias;
+      let foundInGroupBy = false;
+
+      // Check if this column is in GROUP BY
+      for (const groupByCol of this.groupByColumns) {
+        if (groupByCol instanceof ColumnExpression && groupByCol.getColumnName() === columnName) {
+          tableAlias = groupByCol.getTableAlias();
+          foundInGroupBy = true;
+          break;
+        }
+      }
+
+      // If not in GROUP BY, check projections
+      if (!foundInGroupBy) {
+        for (const projection of this.projections) {
+          if (
+            projection.getAlias() === columnName &&
+            projection.getExpression() instanceof ColumnExpression
+          ) {
+            const expr = projection.getExpression() as ColumnExpression;
+            tableAlias = expr.getTableAlias();
+            break;
+          }
+        }
+      }
+
+      // Create the column expression
+      const column = this.expressionBuilder.createColumn(columnName, tableAlias);
+
+      // If the column is not in GROUP BY, wrap it in an aggregate function
+      let havingLeftExpr: Expression;
+      if (foundInGroupBy) {
+        havingLeftExpr = column;
+      } else {
+        // Determine which aggregate function to use based on context
+        // Default to AVG as it's a common choice
+        havingLeftExpr = this.expressionBuilder.createAvg(column);
+      }
+
+      // Create the value expression
+      const valueExpr = this.expressionBuilder.createConstant(Number(value));
+
+      // Create the complete comparison expression
+      const havingExpr = this.expressionBuilder.createBinary(exprType, havingLeftExpr, valueExpr);
+
+      // Add to existing having clause or set as new having clause
+      if (newQueryable.havingClause) {
+        newQueryable.havingClause = this.expressionBuilder.createAnd(
+          newQueryable.havingClause,
+          havingExpr,
+        );
+      } else {
+        newQueryable.havingClause = havingExpr;
+      }
+
+      return newQueryable;
+    }
+
+    // If not a recognized pattern, try normal parsing
     try {
       // Create a lambda parser with property tracking information
       const enhancedParser = new LambdaParser(
@@ -986,14 +1303,51 @@ export class Queryable<T> {
       // Attempt to parse with enhanced support
       const predicateExpr = enhancedParser.parsePredicateWithNesting<T>(predicate, this.alias);
 
+      // If we're in a GROUP BY context, we need to transform non-aggregated expressions
+      let havingExpr = predicateExpr;
+      if (hasGroupBy && predicateExpr instanceof BinaryExpression) {
+        // Check if the left side is a column expression
+        const left = predicateExpr.getLeft();
+        const right = predicateExpr.getRight();
+
+        if (left instanceof ColumnExpression) {
+          const columnName = left.getColumnName();
+          const tableAlias = left.getTableAlias();
+
+          // Check if this column is part of GROUP BY
+          let isGroupByColumn = false;
+          for (const groupByCol of this.groupByColumns) {
+            if (
+              groupByCol instanceof ColumnExpression &&
+              groupByCol.getColumnName() === columnName &&
+              groupByCol.getTableAlias() === tableAlias
+            ) {
+              isGroupByColumn = true;
+              break;
+            }
+          }
+
+          // If not in GROUP BY, wrap in an aggregate function
+          if (!isGroupByColumn) {
+            // Use AVG as default aggregate function
+            const avgExpr = this.expressionBuilder.createAvg(left);
+            havingExpr = this.expressionBuilder.createBinary(
+              predicateExpr.getOperatorType(),
+              avgExpr,
+              right,
+            );
+          }
+        }
+      }
+
       // If there's already a having clause, AND it with the new one
       if (newQueryable.havingClause) {
         newQueryable.havingClause = this.expressionBuilder.createAnd(
           newQueryable.havingClause,
-          predicateExpr,
+          havingExpr,
         );
       } else {
-        newQueryable.havingClause = predicateExpr;
+        newQueryable.havingClause = havingExpr;
       }
     } catch (err) {
       console.warn(
@@ -1015,6 +1369,451 @@ export class Queryable<T> {
     }
 
     return newQueryable;
+  }
+
+  /**
+   * Helper to create a HAVING clause using COUNT
+   * @param predicate A function that takes the count value and returns a boolean condition
+   */
+  havingCount(predicate: (value: number) => boolean): Queryable<T> {
+    // Create a new queryable
+    const newQueryable = this.clone();
+
+    // Extract the comparison operator and value from the predicate string
+    const predicateStr = predicate.toString();
+    const comparisonMatch = predicateStr.match(/\(?(\w+)\)?\s*([><=!]+)\s*(\d+(?:\.\d+)?)/);
+
+    if (comparisonMatch) {
+      const [_, paramName, operator, valueStr] = comparisonMatch;
+      const value = Number(valueStr);
+
+      // Map the operator to an expression type
+      let exprType: ExpressionType;
+      switch (operator) {
+        case '>':
+          exprType = ExpressionType.GreaterThan;
+          break;
+        case '>=':
+          exprType = ExpressionType.GreaterThanOrEqual;
+          break;
+        case '<':
+          exprType = ExpressionType.LessThan;
+          break;
+        case '<=':
+          exprType = ExpressionType.LessThanOrEqual;
+          break;
+        case '=':
+        case '==':
+        case '===':
+          exprType = ExpressionType.Equal;
+          break;
+        case '!=':
+        case '!==':
+          exprType = ExpressionType.NotEqual;
+          break;
+        default:
+          throw new Error(`Unsupported operator: ${operator}`);
+      }
+
+      // Create COUNT(*) expression
+      const countExpr = this.expressionBuilder.createCount(null);
+
+      // Create the value constant
+      const valueExpr = this.expressionBuilder.createConstant(value);
+
+      // Create the binary comparison
+      const havingExpr = this.expressionBuilder.createBinary(exprType, countExpr, valueExpr);
+
+      // Add to existing HAVING clause or set as new HAVING clause
+      if (newQueryable.havingClause) {
+        newQueryable.havingClause = this.expressionBuilder.createAnd(
+          newQueryable.havingClause,
+          havingExpr,
+        );
+      } else {
+        newQueryable.havingClause = havingExpr;
+      }
+
+      return newQueryable;
+    }
+
+    throw new Error(`Could not parse COUNT predicate: ${predicateStr}`);
+  }
+
+  /**
+   * Helper to create a HAVING clause using AVG
+   * @param selector Function to select the column to average
+   * @param predicate A function that takes the average value and returns a boolean condition
+   */
+  havingAvg(selector: AggregateSelector<T>, predicate: (value: number) => boolean): Queryable<T> {
+    // Create a new queryable
+    const newQueryable = this.clone();
+
+    // Extract the property from the selector
+    const selectorStr = selector.toString();
+    const propMatch = selectorStr.match(/[gs]\.([a-zA-Z0-9_]+)(?:\.|$)/);
+
+    if (!propMatch || !propMatch[1]) {
+      throw new Error(`Could not extract property from AVG selector: ${selectorStr}`);
+    }
+
+    const propName = propMatch[1];
+    let tableAlias = this.alias;
+    let columnName = propName;
+
+    // Determine the correct table and column
+    if (this.propertyTracker) {
+      const propSource = this.propertyTracker.getPropertySource(propName);
+      if (propSource) {
+        tableAlias = propSource.tableAlias;
+        columnName = propSource.columnName !== '*' ? propSource.columnName : propName;
+      }
+    }
+
+    // Create the column expression
+    const column = this.expressionBuilder.createColumn(columnName, tableAlias);
+
+    // Create the AVG function
+    const avgExpr = this.expressionBuilder.createAvg(column);
+
+    // Extract the comparison operator and value from the predicate
+    const predicateStr = predicate.toString();
+    const comparisonMatch = predicateStr.match(/\(?(\w+)\)?\s*([><=!]+)\s*(\d+(?:\.\d+)?)/);
+
+    if (comparisonMatch) {
+      const [_, paramName, operator, valueStr] = comparisonMatch;
+      const value = Number(valueStr);
+
+      // Map the operator to an expression type
+      let exprType: ExpressionType;
+      switch (operator) {
+        case '>':
+          exprType = ExpressionType.GreaterThan;
+          break;
+        case '>=':
+          exprType = ExpressionType.GreaterThanOrEqual;
+          break;
+        case '<':
+          exprType = ExpressionType.LessThan;
+          break;
+        case '<=':
+          exprType = ExpressionType.LessThanOrEqual;
+          break;
+        case '=':
+        case '==':
+        case '===':
+          exprType = ExpressionType.Equal;
+          break;
+        case '!=':
+        case '!==':
+          exprType = ExpressionType.NotEqual;
+          break;
+        default:
+          throw new Error(`Unsupported operator: ${operator}`);
+      }
+
+      // Create the value constant
+      const valueExpr = this.expressionBuilder.createConstant(value);
+
+      // Create the binary comparison
+      const havingExpr = this.expressionBuilder.createBinary(exprType, avgExpr, valueExpr);
+
+      // Add to existing HAVING clause or set as new HAVING clause
+      if (newQueryable.havingClause) {
+        newQueryable.havingClause = this.expressionBuilder.createAnd(
+          newQueryable.havingClause,
+          havingExpr,
+        );
+      } else {
+        newQueryable.havingClause = havingExpr;
+      }
+
+      return newQueryable;
+    }
+
+    throw new Error(`Could not parse AVG predicate: ${predicateStr}`);
+  }
+
+  /**
+   * Helper to create a HAVING clause using SUM
+   * @param selector Function to select the column to sum
+   * @param predicate A function that takes the sum value and returns a boolean condition
+   */
+  havingSum(selector: AggregateSelector<T>, predicate: (value: number) => boolean): Queryable<T> {
+    // Create a new queryable
+    const newQueryable = this.clone();
+
+    // Extract the property from the selector
+    const selectorStr = selector.toString();
+    const propMatch = selectorStr.match(/[gs]\.([a-zA-Z0-9_]+)(?:\.|$)/);
+
+    if (!propMatch || !propMatch[1]) {
+      throw new Error(`Could not extract property from SUM selector: ${selectorStr}`);
+    }
+
+    const propName = propMatch[1];
+    let tableAlias = this.alias;
+    let columnName = propName;
+
+    // Determine the correct table and column
+    if (this.propertyTracker) {
+      const propSource = this.propertyTracker.getPropertySource(propName);
+      if (propSource) {
+        tableAlias = propSource.tableAlias;
+        columnName = propSource.columnName !== '*' ? propSource.columnName : propName;
+      }
+    }
+
+    // Create the column expression
+    const column = this.expressionBuilder.createColumn(columnName, tableAlias);
+
+    // Create the SUM function
+    const sumExpr = this.expressionBuilder.createSum(column);
+
+    // Extract the comparison operator and value from the predicate
+    const predicateStr = predicate.toString();
+    const comparisonMatch = predicateStr.match(/\(?(\w+)\)?\s*([><=!]+)\s*(\d+(?:\.\d+)?)/);
+
+    if (comparisonMatch) {
+      const [_, paramName, operator, valueStr] = comparisonMatch;
+      const value = Number(valueStr);
+
+      // Map the operator to an expression type
+      let exprType: ExpressionType;
+      switch (operator) {
+        case '>':
+          exprType = ExpressionType.GreaterThan;
+          break;
+        case '>=':
+          exprType = ExpressionType.GreaterThanOrEqual;
+          break;
+        case '<':
+          exprType = ExpressionType.LessThan;
+          break;
+        case '<=':
+          exprType = ExpressionType.LessThanOrEqual;
+          break;
+        case '=':
+        case '==':
+        case '===':
+          exprType = ExpressionType.Equal;
+          break;
+        case '!=':
+        case '!==':
+          exprType = ExpressionType.NotEqual;
+          break;
+        default:
+          throw new Error(`Unsupported operator: ${operator}`);
+      }
+
+      // Create the value constant
+      const valueExpr = this.expressionBuilder.createConstant(value);
+
+      // Create the binary comparison
+      const havingExpr = this.expressionBuilder.createBinary(exprType, sumExpr, valueExpr);
+
+      // Add to existing HAVING clause or set as new HAVING clause
+      if (newQueryable.havingClause) {
+        newQueryable.havingClause = this.expressionBuilder.createAnd(
+          newQueryable.havingClause,
+          havingExpr,
+        );
+      } else {
+        newQueryable.havingClause = havingExpr;
+      }
+
+      return newQueryable;
+    }
+
+    throw new Error(`Could not parse SUM predicate: ${predicateStr}`);
+  }
+
+  /**
+   * Helper to create a HAVING clause using MIN
+   * @param selector Function to select the column to find the minimum value
+   * @param predicate A function that takes the min value and returns a boolean condition
+   */
+  havingMin(selector: AggregateSelector<T>, predicate: (value: number) => boolean): Queryable<T> {
+    // Create a new queryable
+    const newQueryable = this.clone();
+
+    // Extract the property from the selector
+    const selectorStr = selector.toString();
+    const propMatch = selectorStr.match(/[gs]\.([a-zA-Z0-9_]+)(?:\.|$)/);
+
+    if (!propMatch || !propMatch[1]) {
+      throw new Error(`Could not extract property from MIN selector: ${selectorStr}`);
+    }
+
+    const propName = propMatch[1];
+    let tableAlias = this.alias;
+    let columnName = propName;
+
+    // Determine the correct table and column
+    if (this.propertyTracker) {
+      const propSource = this.propertyTracker.getPropertySource(propName);
+      if (propSource) {
+        tableAlias = propSource.tableAlias;
+        columnName = propSource.columnName !== '*' ? propSource.columnName : propName;
+      }
+    }
+
+    // Create the column expression
+    const column = this.expressionBuilder.createColumn(columnName, tableAlias);
+
+    // Create the MIN function
+    const minExpr = this.expressionBuilder.createMin(column);
+
+    // Extract the comparison operator and value from the predicate
+    const predicateStr = predicate.toString();
+    const comparisonMatch = predicateStr.match(/\(?(\w+)\)?\s*([><=!]+)\s*(\d+(?:\.\d+)?)/);
+
+    if (comparisonMatch) {
+      const [_, paramName, operator, valueStr] = comparisonMatch;
+      const value = Number(valueStr);
+
+      // Map the operator to an expression type
+      let exprType: ExpressionType;
+      switch (operator) {
+        case '>':
+          exprType = ExpressionType.GreaterThan;
+          break;
+        case '>=':
+          exprType = ExpressionType.GreaterThanOrEqual;
+          break;
+        case '<':
+          exprType = ExpressionType.LessThan;
+          break;
+        case '<=':
+          exprType = ExpressionType.LessThanOrEqual;
+          break;
+        case '=':
+        case '==':
+        case '===':
+          exprType = ExpressionType.Equal;
+          break;
+        case '!=':
+        case '!==':
+          exprType = ExpressionType.NotEqual;
+          break;
+        default:
+          throw new Error(`Unsupported operator: ${operator}`);
+      }
+
+      // Create the value constant
+      const valueExpr = this.expressionBuilder.createConstant(value);
+
+      // Create the binary comparison
+      const havingExpr = this.expressionBuilder.createBinary(exprType, minExpr, valueExpr);
+
+      // Add to existing HAVING clause or set as new HAVING clause
+      if (newQueryable.havingClause) {
+        newQueryable.havingClause = this.expressionBuilder.createAnd(
+          newQueryable.havingClause,
+          havingExpr,
+        );
+      } else {
+        newQueryable.havingClause = havingExpr;
+      }
+
+      return newQueryable;
+    }
+
+    throw new Error(`Could not parse MIN predicate: ${predicateStr}`);
+  }
+
+  /**
+   * Helper to create a HAVING clause using MAX
+   * @param selector Function to select the column to find the maximum value
+   * @param predicate A function that takes the max value and returns a boolean condition
+   */
+  havingMax(selector: AggregateSelector<T>, predicate: (value: number) => boolean): Queryable<T> {
+    // Create a new queryable
+    const newQueryable = this.clone();
+
+    // Extract the property from the selector
+    const selectorStr = selector.toString();
+    const propMatch = selectorStr.match(/[gs]\.([a-zA-Z0-9_]+)(?:\.|$)/);
+
+    if (!propMatch || !propMatch[1]) {
+      throw new Error(`Could not extract property from MAX selector: ${selectorStr}`);
+    }
+
+    const propName = propMatch[1];
+    let tableAlias = this.alias;
+    let columnName = propName;
+
+    // Determine the correct table and column
+    if (this.propertyTracker) {
+      const propSource = this.propertyTracker.getPropertySource(propName);
+      if (propSource) {
+        tableAlias = propSource.tableAlias;
+        columnName = propSource.columnName !== '*' ? propSource.columnName : propName;
+      }
+    }
+
+    // Create the column expression
+    const column = this.expressionBuilder.createColumn(columnName, tableAlias);
+
+    // Create the MAX function
+    const maxExpr = this.expressionBuilder.createMax(column);
+
+    // Extract the comparison operator and value from the predicate
+    const predicateStr = predicate.toString();
+    const comparisonMatch = predicateStr.match(/\(?(\w+)\)?\s*([><=!]+)\s*(\d+(?:\.\d+)?)/);
+
+    if (comparisonMatch) {
+      const [_, paramName, operator, valueStr] = comparisonMatch;
+      const value = Number(valueStr);
+
+      // Map the operator to an expression type
+      let exprType: ExpressionType;
+      switch (operator) {
+        case '>':
+          exprType = ExpressionType.GreaterThan;
+          break;
+        case '>=':
+          exprType = ExpressionType.GreaterThanOrEqual;
+          break;
+        case '<':
+          exprType = ExpressionType.LessThan;
+          break;
+        case '<=':
+          exprType = ExpressionType.LessThanOrEqual;
+          break;
+        case '=':
+        case '==':
+        case '===':
+          exprType = ExpressionType.Equal;
+          break;
+        case '!=':
+        case '!==':
+          exprType = ExpressionType.NotEqual;
+          break;
+        default:
+          throw new Error(`Unsupported operator: ${operator}`);
+      }
+
+      // Create the value constant
+      const valueExpr = this.expressionBuilder.createConstant(value);
+
+      // Create the binary comparison
+      const havingExpr = this.expressionBuilder.createBinary(exprType, maxExpr, valueExpr);
+
+      // Add to existing HAVING clause or set as new HAVING clause
+      if (newQueryable.havingClause) {
+        newQueryable.havingClause = this.expressionBuilder.createAnd(
+          newQueryable.havingClause,
+          havingExpr,
+        );
+      } else {
+        newQueryable.havingClause = havingExpr;
+      }
+
+      return newQueryable;
+    }
+
+    throw new Error(`Could not parse MAX predicate: ${predicateStr}`);
   }
 
   /**
@@ -1073,7 +1872,7 @@ export class Queryable<T> {
    * Gets the maximum value of a column
    * @param selector Function to select the column
    */
-  max<TResult>(selector: AggregateSelector<T>, alias: string = 'max'): Queryable<TResult> {
+  max<TResult = T>(selector: AggregateSelector<T>, alias: string = 'max'): Queryable<TResult> {
     return this.applyAggregation<TResult>(selector, 'MAX', alias);
   }
 
@@ -1081,7 +1880,7 @@ export class Queryable<T> {
    * Gets the minimum value of a column
    * @param selector Function to select the column
    */
-  min<TResult>(selector: AggregateSelector<T>, alias: string = 'min'): Queryable<TResult> {
+  min<TResult = T>(selector: AggregateSelector<T>, alias: string = 'min'): Queryable<TResult> {
     return this.applyAggregation<TResult>(selector, 'MIN', alias);
   }
 
@@ -1089,7 +1888,7 @@ export class Queryable<T> {
    * Gets the sum of values in a column
    * @param selector Function to select the column
    */
-  sum<TResult>(selector: AggregateSelector<T>, alias: string = 'sum'): Queryable<TResult> {
+  sum<TResult = T>(selector: AggregateSelector<T>, alias: string = 'sum'): Queryable<TResult> {
     return this.applyAggregation<TResult>(selector, 'SUM', alias);
   }
 
@@ -1097,7 +1896,7 @@ export class Queryable<T> {
    * Gets the average value of a column
    * @param selector Function to select the column
    */
-  avg<TResult>(selector: AggregateSelector<T>, alias: string = 'avg'): Queryable<TResult> {
+  avg<TResult = T>(selector: AggregateSelector<T>, alias: string = 'avg'): Queryable<TResult> {
     return this.applyAggregation<TResult>(selector, 'AVG', alias);
   }
 
