@@ -63,7 +63,7 @@ export class DbContext {
     }
 
     // Create a new DbSet with the alias
-    const dbSet = new DbSet<T>(this.provider, tableName, alias);
+    const dbSet = new DbSet<T>(this, this.provider, tableName, alias);
     this.dbSets.set(setId, dbSet);
     return dbSet;
   }

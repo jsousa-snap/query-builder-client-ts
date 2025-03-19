@@ -2,6 +2,7 @@ import { Queryable } from '../query/Queryable';
 import { JoinType } from '../expressions/JoinExpression';
 import { IDatabaseProvider, OrderDirection } from '../query/Types';
 import { ExpressionType } from '../expressions/Expression';
+import { DbContext } from './DbContext';
 
 /**
  * Represents a database table or view
@@ -14,6 +15,7 @@ export class DbSet<T> {
    * @param alias The unique alias for the table
    */
   constructor(
+    private readonly context: DbContext,
     private readonly provider: IDatabaseProvider,
     private readonly tableName: string,
     private readonly alias: string,
@@ -36,6 +38,15 @@ export class DbSet<T> {
   /**
    * Creates a new queryable for this table
    * @param variables Optional context variables for the query
+   */
+  withVariables(variables: Record<string, any>): Queryable<T> {
+    // Cria e retorna um novo Queryable com as variáveis fornecidas
+    return new Queryable<T>(this.provider, this.tableName, this.alias, variables);
+  }
+
+  /**
+   * Cria e retorna um novo Queryable
+   * @param variables Variáveis opcionais para a consulta (padrão = {})
    */
   query(variables: Record<string, any> = {}): Queryable<T> {
     return new Queryable<T>(this.provider, this.tableName, this.alias, variables);
