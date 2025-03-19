@@ -1,5 +1,5 @@
 import { DbSet } from '../../context/DbSet';
-import { Expression, ExpressionType } from '../../expressions/Expression';
+import { ExpressionType } from '../../expressions/Expression';
 import { Queryable } from '../Queryable';
 import { PredicateFunction } from '../Types';
 

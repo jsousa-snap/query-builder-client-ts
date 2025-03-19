@@ -1,12 +1,9 @@
 import { DbSet } from '../../context/DbSet';
-import { Expression, ExpressionType } from '../../expressions/Expression';
-import { BinaryExpression } from '../../expressions/BinaryExpression';
-import { ColumnExpression } from '../../expressions/ColumnExpression';
+import { ExpressionType } from '../../expressions/Expression';
 import { LambdaParser } from '../LambdaParser';
 import { Queryable } from '../Queryable';
 import { PredicateFunction } from '../Types';
-import { IQueryWhereExtensions } from './WhereExtensions';
-import { ScalarSubqueryExpression } from '../../expressions/ScalarSubqueryExpression';
+import { IQueryWhereExtensions } from './WhereExtensionsInterface';
 
 /**
  * Implementation of WHERE clause extensions
@@ -100,9 +97,6 @@ export class WhereExtensions<T> implements IQueryWhereExtensions<T> {
     return newQueryable;
   }
 
-  // Implement the remaining methods from the interface
-  // Following the same pattern as above
-
   whereNotIn<U>(selector: (entity: T) => any, subquery: Queryable<U>): Queryable<T> {
     // Similar implementation as whereIn but using NOT IN
     const newQueryable = this.queryable.clone();
@@ -128,9 +122,6 @@ export class WhereExtensions<T> implements IQueryWhereExtensions<T> {
     return newQueryable;
   }
 
-  // Continue implementing all the other methods...
-
-  // For example:
   whereExists<U>(
     subquerySource: DbSet<U>,
     parentSelector: (entity: T) => any,
@@ -209,7 +200,408 @@ export class WhereExtensions<T> implements IQueryWhereExtensions<T> {
     return newQueryable;
   }
 
-  // And so on for the remaining methods...
+  whereNotExists<U>(
+    subquerySource: DbSet<U>,
+    parentSelector: (entity: T) => any,
+    subquerySelector: (entity: U) => any,
+    subqueryBuilder: (query: Queryable<U>) => Queryable<any>,
+  ): Queryable<T> {
+    // Similar to whereExists but using NOT EXISTS
+    const newQueryable = this.queryable.clone();
+    const subquery = subquerySource.query();
+
+    const enhancedParser = new LambdaParser(
+      this.queryable.expressionBuilder,
+      this.queryable.contextVariables,
+      this.queryable.getPropertyTracker(),
+    );
+
+    const parentColumn = enhancedParser.parseAggregationSelector<T>(
+      parentSelector,
+      this.queryable.alias,
+    );
+
+    const subqueryEnhancedParser = new LambdaParser(
+      subquery.expressionBuilder,
+      subquery.contextVariables,
+      subquery.getPropertyTracker(),
+    );
+
+    const subqueryColumn = subqueryEnhancedParser.parseAggregationSelector<U>(
+      subquerySelector,
+      subquerySource.getAlias(),
+    );
+
+    const equalityExpr = subquery.expressionBuilder.createEqual(subqueryColumn, parentColumn);
+
+    const initialSubquery = subquery.clone();
+    if (initialSubquery.whereClause) {
+      initialSubquery.whereClause = initialSubquery.expressionBuilder.createAnd(
+        initialSubquery.whereClause,
+        equalityExpr,
+      );
+    } else {
+      initialSubquery.whereClause = equalityExpr;
+    }
+
+    const transformedSubquery = subqueryBuilder(initialSubquery);
+
+    let finalSubquery = transformedSubquery;
+    if (transformedSubquery.projections.length === 0) {
+      finalSubquery = transformedSubquery.select(_ => 1);
+    }
+
+    const selectExpr = finalSubquery.toMetadata();
+    const subqueryExpr = this.queryable.expressionBuilder.createSubquery(selectExpr);
+
+    const notExistsExpr = this.queryable.expressionBuilder.createNotExistsSubquery(subqueryExpr);
+
+    if (newQueryable.whereClause) {
+      newQueryable.whereClause = this.queryable.expressionBuilder.createAnd(
+        newQueryable.whereClause,
+        notExistsExpr,
+      );
+    } else {
+      newQueryable.whereClause = notExistsExpr;
+    }
+
+    return newQueryable;
+  }
+
+  whereCompareSubquery<U>(
+    selector: (entity: T) => any,
+    operator: ExpressionType,
+    subquery: Queryable<U>,
+  ): Queryable<T> {
+    const newQueryable = this.queryable.clone();
+    const selectorStr = selector.toString();
+    const propertyInfo = this.queryable.resolvePropertyPath(selectorStr, this.queryable.alias);
+    const column = this.queryable.expressionBuilder.createColumn(
+      propertyInfo.columnName,
+      propertyInfo.tableAlias,
+    );
+    const selectExpr = subquery.toMetadata();
+    const subqueryExpr = this.queryable.expressionBuilder.createSubquery(selectExpr);
+    const compareExpr = this.queryable.expressionBuilder.createBinary(
+      operator,
+      column,
+      subqueryExpr,
+    );
+
+    if (newQueryable.whereClause) {
+      newQueryable.whereClause = this.queryable.expressionBuilder.createAnd(
+        newQueryable.whereClause,
+        compareExpr,
+      );
+    } else {
+      newQueryable.whereClause = compareExpr;
+    }
+
+    return newQueryable;
+  }
+
+  whereEqual<U>(selector: (entity: T) => any, subquery: Queryable<U>): Queryable<T> {
+    return this.whereCompareSubquery(selector, ExpressionType.Equal, subquery);
+  }
+
+  whereNotEqual<U>(selector: (entity: T) => any, subquery: Queryable<U>): Queryable<T> {
+    return this.whereCompareSubquery(selector, ExpressionType.NotEqual, subquery);
+  }
+
+  whereGreaterThan<U>(selector: (entity: T) => any, subquery: Queryable<U>): Queryable<T> {
+    return this.whereCompareSubquery(selector, ExpressionType.GreaterThan, subquery);
+  }
+
+  whereGreaterThanOrEqual<U>(selector: (entity: T) => any, subquery: Queryable<U>): Queryable<T> {
+    return this.whereCompareSubquery(selector, ExpressionType.GreaterThanOrEqual, subquery);
+  }
+
+  whereLessThan<U>(selector: (entity: T) => any, subquery: Queryable<U>): Queryable<T> {
+    return this.whereCompareSubquery(selector, ExpressionType.LessThan, subquery);
+  }
+
+  whereLessThanOrEqual<U>(selector: (entity: T) => any, subquery: Queryable<U>): Queryable<T> {
+    return this.whereCompareSubquery(selector, ExpressionType.LessThanOrEqual, subquery);
+  }
+
+  whereInCorrelated<U>(
+    subquerySource: DbSet<U>,
+    parentSelector: (entity: T) => any,
+    subquerySelector: (entity: U) => any,
+    subqueryBuilder: (query: Queryable<U>) => Queryable<any>,
+  ): Queryable<T> {
+    const newQueryable = this.queryable.clone();
+    const subquery = subquerySource.query();
+
+    const enhancedParser = new LambdaParser(
+      this.queryable.expressionBuilder,
+      this.queryable.contextVariables,
+      this.queryable.getPropertyTracker(),
+    );
+
+    const parentColumn = enhancedParser.parseAggregationSelector<T>(
+      parentSelector,
+      this.queryable.alias,
+    );
+
+    const subqueryEnhancedParser = new LambdaParser(
+      subquery.expressionBuilder,
+      subquery.contextVariables,
+      subquery.getPropertyTracker(),
+    );
+
+    const subqueryColumn = subqueryEnhancedParser.parseAggregationSelector<U>(
+      subquerySelector,
+      subquerySource.getAlias(),
+    );
+
+    const equalityExpr = subquery.expressionBuilder.createEqual(subqueryColumn, parentColumn);
+
+    const initialSubquery = subquery.clone();
+    if (initialSubquery.whereClause) {
+      initialSubquery.whereClause = initialSubquery.expressionBuilder.createAnd(
+        initialSubquery.whereClause,
+        equalityExpr,
+      );
+    } else {
+      initialSubquery.whereClause = equalityExpr;
+    }
+
+    const transformedSubquery = subqueryBuilder(initialSubquery);
+    const selectExpr = transformedSubquery.toMetadata();
+    const subqueryExpr = this.queryable.expressionBuilder.createSubquery(selectExpr);
+    const inExpr = this.queryable.expressionBuilder.createInSubquery(parentColumn, subqueryExpr);
+
+    if (newQueryable.whereClause) {
+      newQueryable.whereClause = this.queryable.expressionBuilder.createAnd(
+        newQueryable.whereClause,
+        inExpr,
+      );
+    } else {
+      newQueryable.whereClause = inExpr;
+    }
+
+    return newQueryable;
+  }
+
+  whereNotInCorrelated<U>(
+    subquerySource: DbSet<U>,
+    parentSelector: (entity: T) => any,
+    subquerySelector: (entity: U) => any,
+    subqueryBuilder: (query: Queryable<U>) => Queryable<any>,
+  ): Queryable<T> {
+    const newQueryable = this.queryable.clone();
+    const subquery = subquerySource.query();
+
+    const enhancedParser = new LambdaParser(
+      this.queryable.expressionBuilder,
+      this.queryable.contextVariables,
+      this.queryable.getPropertyTracker(),
+    );
+
+    const parentColumn = enhancedParser.parseAggregationSelector<T>(
+      parentSelector,
+      this.queryable.alias,
+    );
+
+    const subqueryEnhancedParser = new LambdaParser(
+      subquery.expressionBuilder,
+      subquery.contextVariables,
+      subquery.getPropertyTracker(),
+    );
+
+    const subqueryColumn = subqueryEnhancedParser.parseAggregationSelector<U>(
+      subquerySelector,
+      subquerySource.getAlias(),
+    );
+
+    const equalityExpr = subquery.expressionBuilder.createEqual(subqueryColumn, parentColumn);
+
+    const initialSubquery = subquery.clone();
+    if (initialSubquery.whereClause) {
+      initialSubquery.whereClause = initialSubquery.expressionBuilder.createAnd(
+        initialSubquery.whereClause,
+        equalityExpr,
+      );
+    } else {
+      initialSubquery.whereClause = equalityExpr;
+    }
+
+    const transformedSubquery = subqueryBuilder(initialSubquery);
+    const selectExpr = transformedSubquery.toMetadata();
+    const subqueryExpr = this.queryable.expressionBuilder.createSubquery(selectExpr);
+    const notInExpr = this.queryable.expressionBuilder.createNotInSubquery(
+      parentColumn,
+      subqueryExpr,
+    );
+
+    if (newQueryable.whereClause) {
+      newQueryable.whereClause = this.queryable.expressionBuilder.createAnd(
+        newQueryable.whereClause,
+        notInExpr,
+      );
+    } else {
+      newQueryable.whereClause = notInExpr;
+    }
+
+    return newQueryable;
+  }
+
+  whereEqualCorrelated<U>(
+    subquerySource: DbSet<U>,
+    parentSelector: (entity: T) => any,
+    subquerySelector: (entity: U) => any,
+    subqueryBuilder: (query: Queryable<U>) => Queryable<any>,
+  ): Queryable<T> {
+    return this.whereCompareCorrelated(
+      subquerySource,
+      parentSelector,
+      subquerySelector,
+      subqueryBuilder,
+      ExpressionType.Equal,
+    );
+  }
+
+  whereNotEqualCorrelated<U>(
+    subquerySource: DbSet<U>,
+    parentSelector: (entity: T) => any,
+    subquerySelector: (entity: U) => any,
+    subqueryBuilder: (query: Queryable<U>) => Queryable<any>,
+  ): Queryable<T> {
+    return this.whereCompareCorrelated(
+      subquerySource,
+      parentSelector,
+      subquerySelector,
+      subqueryBuilder,
+      ExpressionType.NotEqual,
+    );
+  }
+
+  whereGreaterThanCorrelated<U>(
+    subquerySource: DbSet<U>,
+    parentSelector: (entity: T) => any,
+    subquerySelector: (entity: U) => any,
+    subqueryBuilder: (query: Queryable<U>) => Queryable<any>,
+  ): Queryable<T> {
+    return this.whereCompareCorrelated(
+      subquerySource,
+      parentSelector,
+      subquerySelector,
+      subqueryBuilder,
+      ExpressionType.GreaterThan,
+    );
+  }
+
+  whereGreaterThanOrEqualCorrelated<U>(
+    subquerySource: DbSet<U>,
+    parentSelector: (entity: T) => any,
+    subquerySelector: (entity: U) => any,
+    subqueryBuilder: (query: Queryable<U>) => Queryable<any>,
+  ): Queryable<T> {
+    return this.whereCompareCorrelated(
+      subquerySource,
+      parentSelector,
+      subquerySelector,
+      subqueryBuilder,
+      ExpressionType.GreaterThanOrEqual,
+    );
+  }
+
+  whereLessThanCorrelated<U>(
+    subquerySource: DbSet<U>,
+    parentSelector: (entity: T) => any,
+    subquerySelector: (entity: U) => any,
+    subqueryBuilder: (query: Queryable<U>) => Queryable<any>,
+  ): Queryable<T> {
+    return this.whereCompareCorrelated(
+      subquerySource,
+      parentSelector,
+      subquerySelector,
+      subqueryBuilder,
+      ExpressionType.LessThan,
+    );
+  }
+
+  whereLessThanOrEqualCorrelated<U>(
+    subquerySource: DbSet<U>,
+    parentSelector: (entity: T) => any,
+    subquerySelector: (entity: U) => any,
+    subqueryBuilder: (query: Queryable<U>) => Queryable<any>,
+  ): Queryable<T> {
+    return this.whereCompareCorrelated(
+      subquerySource,
+      parentSelector,
+      subquerySelector,
+      subqueryBuilder,
+      ExpressionType.LessThanOrEqual,
+    );
+  }
+
+  // Helper method to handle correlated comparison queries
+  private whereCompareCorrelated<U>(
+    subquerySource: DbSet<U>,
+    parentSelector: (entity: T) => any,
+    subquerySelector: (entity: U) => any,
+    subqueryBuilder: (query: Queryable<U>) => Queryable<any>,
+    operator: ExpressionType,
+  ): Queryable<T> {
+    const newQueryable = this.queryable.clone();
+    const subquery = subquerySource.query();
+
+    const enhancedParser = new LambdaParser(
+      this.queryable.expressionBuilder,
+      this.queryable.contextVariables,
+      this.queryable.getPropertyTracker(),
+    );
+
+    const parentColumn = enhancedParser.parseAggregationSelector<T>(
+      parentSelector,
+      this.queryable.alias,
+    );
+
+    const subqueryEnhancedParser = new LambdaParser(
+      subquery.expressionBuilder,
+      subquery.contextVariables,
+      subquery.getPropertyTracker(),
+    );
+
+    const subqueryColumn = subqueryEnhancedParser.parseAggregationSelector<U>(
+      subquerySelector,
+      subquerySource.getAlias(),
+    );
+
+    const equalityExpr = subquery.expressionBuilder.createEqual(subqueryColumn, parentColumn);
+
+    const initialSubquery = subquery.clone();
+    if (initialSubquery.whereClause) {
+      initialSubquery.whereClause = initialSubquery.expressionBuilder.createAnd(
+        initialSubquery.whereClause,
+        equalityExpr,
+      );
+    } else {
+      initialSubquery.whereClause = equalityExpr;
+    }
+
+    const transformedSubquery = subqueryBuilder(initialSubquery);
+    const selectExpr = transformedSubquery.toMetadata();
+    const subqueryExpr = this.queryable.expressionBuilder.createSubquery(selectExpr);
+    const compareExpr = this.queryable.expressionBuilder.createBinary(
+      operator,
+      parentColumn,
+      subqueryExpr,
+    );
+
+    if (newQueryable.whereClause) {
+      newQueryable.whereClause = this.queryable.expressionBuilder.createAnd(
+        newQueryable.whereClause,
+        compareExpr,
+      );
+    } else {
+      newQueryable.whereClause = compareExpr;
+    }
+
+    return newQueryable;
+  }
 }
 
 /**

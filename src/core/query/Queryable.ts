@@ -12,16 +12,16 @@ import { SqlServerGenerationVisitor } from '../visitors/SqlServerGenerationVisit
 import { ExpressionSerializer } from '../../utils/ExpressionSerializer';
 
 // Import extension types
-import { IQueryWhereExtensions } from './extensions/WhereExtensions';
-import { IQueryJoinExtensions } from './extensions/JoinExtensions';
-import { IQuerySelectExtensions } from './extensions/SelectExtensions';
-import { IQueryOrderByExtensions } from './extensions/OrderByExtensions';
-import { IQueryGroupByExtensions } from './extensions/GroupByExtensions';
-import { IQueryHavingExtensions } from './extensions/HavingExtensions';
-import { IQueryAggregationExtensions } from './extensions/AggregationExtensions';
-import { IQuerySubqueryExtensions } from './extensions/SubqueryExtensions';
-import { IQueryPaginationExtensions } from './extensions/PaginationExtensions';
-import { IQueryExecutionExtensions } from './extensions/ExecutionExtensions';
+import { IQueryWhereExtensions } from './extensions/WhereExtensionsInterface';
+import { IQueryJoinExtensions } from './extensions/JoinExtensionsInterface';
+import { IQuerySelectExtensions } from './extensions/SelectExtensionsInterface';
+import { IQueryOrderByExtensions } from './extensions/OrderByExtensionsInterface';
+import { IQueryGroupByExtensions } from './extensions/GroupByExtensionsInterface';
+import { IQueryHavingExtensions } from './extensions/HavingExtensionsInterface';
+import { IQueryAggregationExtensions } from './extensions/AggregationExtensionsInterface';
+import { IQuerySubqueryExtensions } from './extensions/SubqueryExtensionsInterface';
+import { IQueryPaginationExtensions } from './extensions/PaginationExtensionsInterface';
+import { IQueryExecutionExtensions } from './extensions/ExecutionExtensionsInterface';
 
 /**
  * Represents a query that can be built and executed against a data source
@@ -39,9 +39,6 @@ export class Queryable<T>
     IQueryPaginationExtensions<T>,
     IQueryExecutionExtensions<T>
 {
-  readonly expressionBuilder: ExpressionBuilder;
-  readonly lambdaParser: LambdaParser;
-
   // Query components
   fromTable: TableExpression;
   whereClause: Expression | null = null;
@@ -79,7 +76,32 @@ export class Queryable<T>
     // Initialize property tracker
     this.propertyTracker = propertyTracker || new PropertyTracker();
     this.propertyTracker.registerTable(tableName, alias);
+
+    // Initialize all extensions - do this directly in the constructor
+    const { applyWhereExtensions } = require('./extensions/WhereExtensionsImpl');
+    const { applyJoinExtensions } = require('./extensions/JoinExtensionsImpl');
+    const { applySelectExtensions } = require('./extensions/SelectExtensionsImpl');
+    const { applyOrderByExtensions } = require('./extensions/OrderByExtensionsImpl');
+    const { applyGroupByExtensions } = require('./extensions/GroupByExtensionsImpl');
+    const { applyHavingExtensions } = require('./extensions/HavingExtensionsImpl');
+    const { applyAggregationExtensions } = require('./extensions/AggregationExtensionsImpl');
+    const { applyPaginationExtensions } = require('./extensions/PaginationExtensionsImpl');
+    const { applyExecutionExtensions } = require('./extensions/ExecutionExtensionsImpl');
+
+    // Apply all extensions
+    applyWhereExtensions(this);
+    applyJoinExtensions(this);
+    applySelectExtensions(this);
+    applyOrderByExtensions(this);
+    applyGroupByExtensions(this);
+    applyHavingExtensions(this);
+    applyAggregationExtensions(this);
+    applyPaginationExtensions(this);
+    applyExecutionExtensions(this);
   }
+
+  readonly expressionBuilder: ExpressionBuilder;
+  readonly lambdaParser: LambdaParser;
 
   /**
    * Gets the property tracker
@@ -462,10 +484,8 @@ export class Queryable<T>
   }
 
   /**
-   * Get all methods from extension files
+   * Methods from WhereExtensions
    */
-
-  // Import from WhereExtensions.ts
   where!: IQueryWhereExtensions<T>['where'];
   whereIn!: IQueryWhereExtensions<T>['whereIn'];
   whereNotIn!: IQueryWhereExtensions<T>['whereNotIn'];
@@ -487,16 +507,22 @@ export class Queryable<T>
   whereLessThanCorrelated!: IQueryWhereExtensions<T>['whereLessThanCorrelated'];
   whereLessThanOrEqualCorrelated!: IQueryWhereExtensions<T>['whereLessThanOrEqualCorrelated'];
 
-  // Import from JoinExtensions.ts
+  /**
+   * Methods from JoinExtensions
+   */
   join!: IQueryJoinExtensions<T>['join'];
   processNestedJoinKey!: IQueryJoinExtensions<T>['processNestedJoinKey'];
   processResultSelectorForJoin!: IQueryJoinExtensions<T>['processResultSelectorForJoin'];
 
-  // Import from SelectExtensions.ts
+  /**
+   * Methods from SelectExtensions
+   */
   select!: IQuerySelectExtensions<T>['select'];
   withSubquery!: IQuerySelectExtensions<T>['withSubquery'];
 
-  // Import from OrderByExtensions.ts
+  /**
+   * Methods from OrderByExtensions
+   */
   orderBy!: IQueryOrderByExtensions<T>['orderBy'];
   orderByCount!: IQueryOrderByExtensions<T>['orderByCount'];
   orderByAvg!: IQueryOrderByExtensions<T>['orderByAvg'];
@@ -504,10 +530,14 @@ export class Queryable<T>
   orderByMin!: IQueryOrderByExtensions<T>['orderByMin'];
   orderByMax!: IQueryOrderByExtensions<T>['orderByMax'];
 
-  // Import from GroupByExtensions.ts
+  /**
+   * Methods from GroupByExtensions
+   */
   groupBy!: IQueryGroupByExtensions<T>['groupBy'];
 
-  // Import from HavingExtensions.ts
+  /**
+   * Methods from HavingExtensions
+   */
   having!: IQueryHavingExtensions<T>['having'];
   havingCount!: IQueryHavingExtensions<T>['havingCount'];
   havingAvg!: IQueryHavingExtensions<T>['havingAvg'];
@@ -516,7 +546,9 @@ export class Queryable<T>
   havingMax!: IQueryHavingExtensions<T>['havingMax'];
   findColumnForAggregate!: IQueryHavingExtensions<T>['findColumnForAggregate'];
 
-  // Import from AggregationExtensions.ts
+  /**
+   * Methods from AggregationExtensions
+   */
   count!: IQueryAggregationExtensions<T>['count'];
   sum!: IQueryAggregationExtensions<T>['sum'];
   avg!: IQueryAggregationExtensions<T>['avg'];
@@ -524,11 +556,15 @@ export class Queryable<T>
   max!: IQueryAggregationExtensions<T>['max'];
   applyAggregation!: IQueryAggregationExtensions<T>['applyAggregation'];
 
-  // Import from PaginationExtensions.ts
+  /**
+   * Methods from PaginationExtensions
+   */
   limit!: IQueryPaginationExtensions<T>['limit'];
   offset!: IQueryPaginationExtensions<T>['offset'];
 
-  // Import from ExecutionExtensions.ts
+  /**
+   * Methods from ExecutionExtensions
+   */
   toListAsync!: IQueryExecutionExtensions<T>['toListAsync'];
   firstAsync!: IQueryExecutionExtensions<T>['firstAsync'];
 }
