@@ -1,5 +1,5 @@
 import { DbContext } from '../core/context/DbContext';
-import { User } from './common/models';
+import { Order, User } from './common/models';
 import { DbSet } from '../core/context/DbSet';
 import { IDatabaseProvider } from '../core/query/Types';
 
@@ -11,10 +11,12 @@ const mockDatabaseProvider: IDatabaseProvider = {
 describe('Array Parameters Tests', () => {
   let dbContext: DbContext;
   let users: DbSet<User>;
+  let orders: DbSet<Order>;
 
   beforeEach(() => {
     dbContext = new DbContext(mockDatabaseProvider);
     users = dbContext.set<User>('users');
+    orders = dbContext.set<Order>('orders');
   });
 
   test('Where clause with array.includes check', () => {
@@ -139,5 +141,30 @@ WHERE [u].[id] IN (1, 2, 3, 5, 8, 13)`);
     expect(sql).toEqual(`SELECT *
 FROM [users] AS [u]
 WHERE [u].[id] IN (1, N'active', 1, NULL)`);
+  });
+
+  test('Subquery Where clause with array of mixed types', () => {
+    // Arrange - Na prática, evite misturar tipos em arrays
+    const values = [1, 'active', true, null];
+
+    // Act
+    const query = users.withVariables({ values }).whereIn(
+      user => user.id,
+      orders
+        .withVariables({ values })
+        .where((order, params) => params.values.includes(order.userId))
+        .select(order => order.userId),
+    );
+
+    const sql = query.toQueryString();
+
+    // Assert - Verifica como lida com tipos misturados
+    expect(sql).toEqual(`SELECT *
+FROM [users] AS [u]
+WHERE [u].[id] IN (
+  (SELECT
+    [o].[userId]
+    FROM [orders] AS [o]
+    WHERE [o].[userId] IN (1, N'active', 1, NULL)))`);
   });
 });
