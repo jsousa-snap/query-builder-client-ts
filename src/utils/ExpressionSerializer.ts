@@ -11,6 +11,7 @@ import { ProjectionExpression } from '../core/expressions/ProjectionExpression';
 import { ParameterExpression } from '../core/expressions/ParameterExpression';
 
 import { ExpressionType } from '../core/expressions/Expression';
+import { FragmentExpression } from '../core/expressions/FragmentExpression';
 
 /**
  * Interface para representação JSON de uma expressão
@@ -79,6 +80,10 @@ export class ExpressionSerializer {
 
     if (expr instanceof OrderingExpression) {
       return this.serializeOrderByExpression(expr);
+    }
+
+    if (expr instanceof FragmentExpression) {
+      return this.serializeFragmentExpression(expr);
     }
 
     throw new Error(`Unsupported expression type: ${expr.constructor.name}`);
@@ -222,6 +227,13 @@ export class ExpressionSerializer {
       type: 'OrderByExpression',
       column: this.serialize(expr.getColumn()),
       ascending: expr.isAscending(),
+    };
+  }
+
+  private static serializeFragmentExpression(expr: FragmentExpression): ExpressionJson {
+    return {
+      type: 'FragmentExpression',
+      value: expr.getValue(),
     };
   }
 }

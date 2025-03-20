@@ -3,6 +3,7 @@ import { normalizeSQL } from './common/test-utils';
 import { User, Order } from './common/models';
 import { DbSet } from '../core/context/DbSet';
 import { IDatabaseProvider } from '../core/query/Types';
+import { ExpressionSerializer } from '../utils/ExpressionSerializer';
 
 const mockDatabaseProvider: IDatabaseProvider = {
   queryAsync: jest.fn().mockResolvedValue([{ id: 1, name: 'Alice' }]),
@@ -24,6 +25,8 @@ describe('Aggregation Queries', () => {
     const query = users.count();
     const sql = query.toQueryString();
 
+    const metadata = JSON.stringify(ExpressionSerializer.serialize(query.toMetadata()), null, 2);
+
     expect(sql).toEqual(`SELECT COUNT(*) AS [count]
 FROM [users] AS [u]`);
   });
@@ -32,6 +35,8 @@ FROM [users] AS [u]`);
     const query = users.count(u => u.id);
     const sql = query.toQueryString();
 
+    const metadata = JSON.stringify(ExpressionSerializer.serialize(query.toMetadata()), null, 2);
+
     expect(sql).toEqual(`SELECT COUNT([u].[id]) AS [count]
 FROM [users] AS [u]`);
   });
@@ -39,7 +44,7 @@ FROM [users] AS [u]`);
   test('Average calculation', () => {
     const query = users.avg(u => u.age);
     const sql = query.toQueryString();
-
+    const metadata = JSON.stringify(ExpressionSerializer.serialize(query.toMetadata()), null, 2);
     expect(sql).toEqual(`SELECT AVG([u].[age]) AS [avg]
 FROM [users] AS [u]`);
   });
@@ -48,6 +53,8 @@ FROM [users] AS [u]`);
     const query = users.max(u => u.age);
     const sql = query.toQueryString();
 
+    const metadata = JSON.stringify(ExpressionSerializer.serialize(query.toMetadata()), null, 2);
+
     expect(sql).toEqual(`SELECT MAX([u].[age]) AS [max]
 FROM [users] AS [u]`);
   });
@@ -55,6 +62,8 @@ FROM [users] AS [u]`);
   test('Minimum value', () => {
     const query = users.min(u => u.age);
     const sql = query.toQueryString();
+
+    const metadata = JSON.stringify(ExpressionSerializer.serialize(query.toMetadata()), null, 2);
 
     expect(sql).toEqual(`SELECT MIN([u].[age]) AS [min]
 FROM [users] AS [u]`);
