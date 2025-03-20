@@ -29,6 +29,8 @@ describe('Array Parameters Tests', () => {
       .withVariables({ allowedStatuses })
       .where((user, params) => params.allowedStatuses.includes(user.status));
 
+    const metadata = JSON.stringify(ExpressionSerializer.serialize(query.toMetadata()), null, 2);
+
     const sql = query.toQueryString();
 
     // Assert - Verifica se a consulta usa IN corretamente
@@ -45,6 +47,8 @@ WHERE [u].[status] IN (N'active', N'pending', N'verified')`);
     const query = users
       .withVariables({ blockedStatuses })
       .where((user, params) => !params.blockedStatuses.includes(user.status));
+
+    const metadata = JSON.stringify(ExpressionSerializer.serialize(query.toMetadata()), null, 2);
 
     const sql = query.toQueryString();
 
@@ -67,6 +71,8 @@ WHERE NOT ([u].[status] IN (N'inactive', N'banned', N'suspended'))`);
           params.allowedStatuses.includes(user.status) && params.allowedRoles.includes(user.role),
       );
 
+    const metadata = JSON.stringify(ExpressionSerializer.serialize(query.toMetadata()), null, 2);
+
     const sql = query.toQueryString();
 
     // Assert - Verifica se múltiplos arrays funcionam
@@ -86,6 +92,8 @@ WHERE NOT ([u].[status] IN (N'inactive', N'banned', N'suspended'))`);
         (user, params) => params.allowedStatuses.includes(user.status) && user.age >= params.minAge,
       );
 
+    const metadata = JSON.stringify(ExpressionSerializer.serialize(query.toMetadata()), null, 2);
+
     const sql = query.toQueryString();
 
     // Assert - Verifica combinação de array e condições normais
@@ -101,6 +109,8 @@ WHERE NOT ([u].[status] IN (N'inactive', N'banned', N'suspended'))`);
     const query = users
       .withVariables({ allowedStatuses })
       .where((user, params) => params.allowedStatuses.includes(user.status));
+
+    const metadata = JSON.stringify(ExpressionSerializer.serialize(query.toMetadata()), null, 2);
 
     const sql = query.toQueryString();
 
@@ -119,6 +129,8 @@ WHERE [u].[status] IN ()`);
       .withVariables({ allowedIds })
       .where((user, params) => params.allowedIds.includes(user.id));
 
+    const metadata = JSON.stringify(ExpressionSerializer.serialize(query.toMetadata()), null, 2);
+
     const sql = query.toQueryString();
 
     // Assert - Verifica se funciona com números
@@ -135,6 +147,8 @@ WHERE [u].[id] IN (1, 2, 3, 5, 8, 13)`);
     const query = users
       .withVariables({ values })
       .where((user, params) => params.values.includes(user.id));
+
+    const metadata = JSON.stringify(ExpressionSerializer.serialize(query.toMetadata()), null, 2);
 
     const sql = query.toQueryString();
 
@@ -159,7 +173,7 @@ WHERE [u].[id] IN (1, N'active', 1, NULL)`);
 
     const sql = query.toQueryString();
 
-    const meta = JSON.stringify(ExpressionSerializer.serialize(query.toMetadata()), null, 2);
+    const metadata = JSON.stringify(ExpressionSerializer.serialize(query.toMetadata()), null, 2);
 
     // Assert - Verifica como lida com tipos misturados
     expect(sql).toEqual(`SELECT *

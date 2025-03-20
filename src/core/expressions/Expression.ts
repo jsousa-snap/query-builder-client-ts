@@ -51,8 +51,8 @@ export enum ExpressionType {
   GreaterThanOrEqual,
   LessThan,
   LessThanOrEqual,
-  And,
-  Or,
+  AndAlso,
+  OrElse,
 
   // Unary operators
   Not,

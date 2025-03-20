@@ -1178,9 +1178,9 @@ export class LambdaParser {
       case ts.SyntaxKind.LessThanEqualsToken:
         return ExpressionType.LessThanOrEqual;
       case ts.SyntaxKind.AmpersandAmpersandToken:
-        return ExpressionType.And;
+        return ExpressionType.AndAlso;
       case ts.SyntaxKind.BarBarToken:
-        return ExpressionType.Or;
+        return ExpressionType.OrElse;
       default:
         throw new Error(`Operador binário não suportado: ${ts.SyntaxKind[kind]}`);
     }

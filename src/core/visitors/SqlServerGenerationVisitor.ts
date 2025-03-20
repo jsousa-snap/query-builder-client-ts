@@ -561,9 +561,9 @@ export class SqlServerGenerationVisitor implements IExpressionVisitor<string> {
         return '<';
       case ExpressionType.LessThanOrEqual:
         return '<=';
-      case ExpressionType.And:
+      case ExpressionType.AndAlso:
         return 'AND';
-      case ExpressionType.Or:
+      case ExpressionType.OrElse:
         return 'OR';
       case ExpressionType.In:
         return 'IN';

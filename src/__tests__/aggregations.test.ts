@@ -72,7 +72,7 @@ FROM [users] AS [u]`);
   test('Sum calculation', () => {
     const query = orders.sum(o => o.amount);
     const sql = query.toQueryString();
-
+    const metadata = JSON.stringify(ExpressionSerializer.serialize(query.toMetadata()), null, 2);
     expect(sql).toEqual(`SELECT SUM([o].[amount]) AS [sum]
 FROM [orders] AS [o]`);
   });
@@ -80,7 +80,7 @@ FROM [orders] AS [o]`);
   test('Aggregation with where clause', () => {
     const query = users.where(u => u.age > 18).avg(u => u.age);
     const sql = query.toQueryString();
-
+    const metadata = JSON.stringify(ExpressionSerializer.serialize(query.toMetadata()), null, 2);
     expect(sql).toEqual(`SELECT AVG([u].[age]) AS [avg]
 FROM [users] AS [u]
 WHERE ([u].[age] > 18)`);
@@ -101,6 +101,8 @@ WHERE ([u].[age] > 18)`);
       .where(joined => joined.order.amount > 100)
       .avg(joined => joined.order.amount);
     const sql = query.toQueryString();
+
+    const metadata = JSON.stringify(ExpressionSerializer.serialize(query.toMetadata()), null, 2);
 
     expect(sql).toEqual(`SELECT AVG([o].[amount]) AS [avg]
 FROM [users] AS [u]

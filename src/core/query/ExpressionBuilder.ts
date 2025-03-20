@@ -221,14 +221,14 @@ export class ExpressionBuilder {
    * Creates an AND logical operation expression
    */
   createAnd(left: Expression, right: Expression): BinaryExpression {
-    return this.createBinary(ExpressionType.And, left, right);
+    return this.createBinary(ExpressionType.AndAlso, left, right);
   }
 
   /**
    * Creates an OR logical operation expression
    */
   createOr(left: Expression, right: Expression): BinaryExpression {
-    return this.createBinary(ExpressionType.Or, left, right);
+    return this.createBinary(ExpressionType.OrElse, left, right);
   }
 
   /**
