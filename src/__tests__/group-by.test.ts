@@ -28,8 +28,7 @@ describe('Group By Queries', () => {
       }));
     const sql = query.toQueryString();
 
-    expect(sql).toEqual(`SELECT
-  [u].[age] AS [age]
+    expect(sql).toEqual(`SELECT [u].[age] AS [age]
 FROM [users] AS [u]
 GROUP BY [u].[age]`);
   });
@@ -44,8 +43,8 @@ GROUP BY [u].[age]`);
       .count();
     const sql = query.toQueryString();
 
-    expect(sql).toEqual(`SELECT
-  [u].[age] AS [age], [u].[isActive] AS [isActive], COUNT(*) AS [count]
+    expect(sql)
+      .toEqual(`SELECT [u].[age] AS [age], [u].[isActive] AS [isActive], COUNT(*) AS [count]
 FROM [users] AS [u]
 GROUP BY [u].[age], [u].[isActive]`);
   });
@@ -60,8 +59,7 @@ GROUP BY [u].[age], [u].[isActive]`);
       .having(g => (g as any).count > 5);
     const sql = query.toQueryString();
 
-    expect(sql).toEqual(`SELECT
-  [u].[age] AS [age], COUNT(*) AS [count]
+    expect(sql).toEqual(`SELECT [u].[age] AS [age], COUNT(*) AS [count]
 FROM [users] AS [u]
 GROUP BY [u].[age]
 HAVING (COUNT(*) > 5)`);
@@ -76,8 +74,7 @@ HAVING (COUNT(*) > 5)`);
       .avg(g => g.age, 'averageAge');
     const sql = query.toQueryString();
 
-    expect(sql).toEqual(`SELECT
-  [u].[age] AS [age], AVG([u].[age]) AS [averageAge]
+    expect(sql).toEqual(`SELECT [u].[age] AS [age], AVG([u].[age]) AS [averageAge]
 FROM [users] AS [u]
 GROUP BY [u].[age]`);
   });
@@ -98,8 +95,7 @@ GROUP BY [u].[age]`);
       .sum(g => g.amount, 'totalAmount');
     const sql = query.toQueryString();
 
-    expect(sql).toEqual(`SELECT
-  [u].[age] AS [age], SUM([o].[amount]) AS [totalAmount]
+    expect(sql).toEqual(`SELECT [u].[age] AS [age], SUM([o].[amount]) AS [totalAmount]
 FROM [users] AS [u]
 INNER JOIN [orders] AS [o] ON ([u].[id] = [o].[userId])
 GROUP BY [u].[age]`);
@@ -121,8 +117,7 @@ GROUP BY [u].[age]`);
     const sql = query.toQueryString();
 
     expect(sql).toEqual(
-      `SELECT
-  [u].[age] AS [age], AVG([u].[age]) AS [averageAge], COUNT(*) AS [count]
+      `SELECT [u].[age] AS [age], AVG([u].[age]) AS [averageAge], COUNT(*) AS [count]
 FROM [users] AS [u]
 GROUP BY [u].[age]
 HAVING ((COUNT(*) > 5) AND (AVG([u].[age]) > 25))`,
@@ -139,8 +134,7 @@ HAVING ((COUNT(*) > 5) AND (AVG([u].[age]) > 25))`,
       .count();
     const sql = query.toQueryString();
 
-    expect(sql).toEqual(`SELECT
-  [u].[age] AS [age], COUNT(*) AS [count]
+    expect(sql).toEqual(`SELECT [u].[age] AS [age], COUNT(*) AS [count]
 FROM [users] AS [u]
 GROUP BY [u].[age]
 ORDER BY COUNT(*) ASC`);

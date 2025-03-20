@@ -36,10 +36,8 @@ describe('Subquery Queries', () => {
       );
     const sql = query.toQueryString();
 
-    expect(sql).toEqual(`SELECT
-  [u].[id] AS [userId], [u].[name] AS [name],
-    (SELECT
-        COUNT(*) AS [count]
+    expect(sql).toEqual(`SELECT [u].[id] AS [userId], [u].[name] AS [name],
+    (SELECT COUNT(*) AS [count]
         FROM [orders] AS [o]
         WHERE ([o].[userId] = [u].[id])) AS [totalOrders]
 FROM [users] AS [u]`);
@@ -60,10 +58,8 @@ FROM [users] AS [u]`);
       );
     const sql = query.toQueryString();
 
-    expect(sql).toEqual(`SELECT
-  [u].[id] AS [userId], [u].[name] AS [name],
-    (SELECT
-        MAX([o].[amount]) AS [max]
+    expect(sql).toEqual(`SELECT [u].[id] AS [userId], [u].[name] AS [name],
+    (SELECT MAX([o].[amount]) AS [max]
         FROM [orders] AS [o]
         WHERE ([o].[userId] = [u].[id])) AS [maxOrderAmount]
 FROM [users] AS [u]`);
@@ -84,10 +80,8 @@ FROM [users] AS [u]`);
       );
     const sql = query.toQueryString();
 
-    expect(sql).toContain(`SELECT
-  [u].[id] AS [userId], [u].[name] AS [name],
-    (SELECT
-        COUNT(*) AS [count]
+    expect(sql).toContain(`SELECT [u].[id] AS [userId], [u].[name] AS [name],
+    (SELECT COUNT(*) AS [count]
         FROM [orders] AS [o]
         WHERE (([o].[userId] = [u].[id]) AND (([o].[status] = N'active') AND ([o].[amount] > 100)))) AS [activeOrders]
 FROM [users] AS [u]`);

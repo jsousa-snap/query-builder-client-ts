@@ -74,8 +74,7 @@ ORDER BY [o].[amount] DESC`);
 
     const sql = query.toQueryString();
 
-    expect(sql).toEqual(`SELECT
-  [u].[id] AS [userId], [u].[name] AS [userName]
+    expect(sql).toEqual(`SELECT [u].[id] AS [userId], [u].[name] AS [userName]
 FROM [users] AS [u]
 ORDER BY [u].[name] ASC`);
   });

@@ -53,12 +53,10 @@ describe('Query Builder - Subquery WHERE Tests', () => {
       .toQueryString();
 
     // Assert
-    expect(query).toEqual(`SELECT
-  [u].[name]
+    expect(query).toEqual(`SELECT [u].[name]
 FROM [users] AS [u]
 WHERE [u].[id] IN (
-  (SELECT
-    [o].[userId] AS [userId]
+  (SELECT [o].[userId] AS [userId]
     FROM [orders] AS [o]
     WHERE ([o].[status] = N'completed')))`);
   });
@@ -80,8 +78,7 @@ WHERE [u].[id] IN (
     expect(query).toEqual(`SELECT *
 FROM [users] AS [u]
 WHERE [u].[id] NOT IN (
-  (SELECT
-    [o].[userId] AS [userId]
+  (SELECT [o].[userId] AS [userId]
     FROM [orders] AS [o]
     WHERE ([o].[status] = N'canceled')))`);
   });
@@ -105,8 +102,7 @@ WHERE [u].[id] NOT IN (
     expect(sql).toEqual(`SELECT *
 FROM [users] AS [u]
 WHERE EXISTS (
-  (SELECT
-    1
+  (SELECT 1
     FROM [orders] AS [o]
     WHERE (([o].[userId] = [u].[id]) AND ([o].[status] = N'completed'))))`);
   });
@@ -130,8 +126,7 @@ WHERE EXISTS (
     expect(sql).toEqual(`SELECT *
 FROM [users] AS [u]
 WHERE NOT EXISTS (
-  (SELECT
-    1
+  (SELECT 1
     FROM [orders] AS [o]
     WHERE (([o].[userId] = [u].[id]) AND ([o].[status] = N'canceled'))))`);
   });
@@ -156,8 +151,7 @@ WHERE NOT EXISTS (
     expect(sql).toEqual(`SELECT *
 FROM [users] AS [u]
 WHERE ([u].[id] = 
-  (SELECT TOP 1
-    [d].[managerId]
+  (SELECT TOP 1 [d].[managerId]
     FROM [departments] AS [d]
     WHERE ([d].[name] = N'IT')))`);
   });
@@ -175,8 +169,7 @@ WHERE ([u].[id] =
     expect(sql).toEqual(`SELECT *
 FROM [users] AS [u]
 WHERE ([u].[salary] > 
-  (SELECT TOP 1
-    AVG([u].[salary]) AS [avg]
+  (SELECT TOP 1 AVG([u].[salary]) AS [avg]
     FROM [users] AS [u]))`);
   });
 
@@ -197,8 +190,7 @@ WHERE ([u].[salary] >
     expect(sql).toEqual(`SELECT *
 FROM [users] AS [u]
 WHERE ([u].[salary] >= 
-  (SELECT TOP 1
-    50000 AS [min_salary]
+  (SELECT TOP 1 50000 AS [min_salary]
     FROM [departments] AS [d]))`);
   });
 
@@ -215,8 +207,7 @@ WHERE ([u].[salary] >=
     expect(sql).toEqual(`SELECT *
 FROM [users] AS [u]
 WHERE ([u].[salary] < 
-  (SELECT TOP 1
-    100000 AS [max_salary]
+  (SELECT TOP 1 100000 AS [max_salary]
     FROM [departments] AS [d]))`);
   });
 
@@ -237,8 +228,7 @@ WHERE ([u].[salary] <
     expect(sql).toEqual(`SELECT *
 FROM [users] AS [u]
 WHERE ([u].[salary] <= 
-  (SELECT TOP 1
-    75000 AS [avg_salary]
+  (SELECT TOP 1 75000 AS [avg_salary]
     FROM [departments] AS [d]))`);
   });
 
@@ -262,8 +252,7 @@ WHERE ([u].[salary] <=
     expect(sql).toEqual(`SELECT *
 FROM [users] AS [u]
 WHERE ([u].[departmentId] <> 
-  (SELECT TOP 1
-    [d].[id]
+  (SELECT TOP 1 [d].[id]
     FROM [departments] AS [d]
     WHERE ([d].[name] = N'HR')))`);
   });
@@ -300,16 +289,13 @@ WHERE ([u].[departmentId] <>
     expect(sql).toEqual(`SELECT *
 FROM [users] AS [u]
 WHERE ((([u].[name] LIKE CONCAT(N'%', N'John', N'%') AND [u].[id] IN (
-  (SELECT
-    [o].[userId]
+  (SELECT [o].[userId]
     FROM [orders] AS [o]
     WHERE ([o].[amount] > 1000)))) AND NOT EXISTS (
-  (SELECT
-    1
+  (SELECT 1
     FROM [orders] AS [o]
     WHERE (([o].[userId] = [u].[id]) AND ([o].[status] = N'canceled'))))) AND ([u].[departmentId] = 
-  (SELECT TOP 1
-    [d].[id]
+  (SELECT TOP 1 [d].[id]
     FROM [departments] AS [d]
     WHERE ([d].[name] = N'Sales'))))`);
   });

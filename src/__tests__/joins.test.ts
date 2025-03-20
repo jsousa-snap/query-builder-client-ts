@@ -53,8 +53,7 @@ INNER JOIN [orders] AS [o] ON ([u].[id] = [o].[userId])`);
       }));
     const sql = query.toQueryString();
 
-    expect(sql).toEqual(`SELECT
-  [u].[name] AS [userName], [o].[amount] AS [orderAmount]
+    expect(sql).toEqual(`SELECT [u].[name] AS [userName], [o].[amount] AS [orderAmount]
 FROM [users] AS [u]
 INNER JOIN [orders] AS [o] ON ([u].[id] = [o].[userId])`);
   });
@@ -127,8 +126,8 @@ LEFT OUTER JOIN [orders] AS [o] ON ([u].[id] = [o].[userId])`);
       }));
     const sql = query.toQueryString();
 
-    expect(sql).toEqual(`SELECT
-  [u].[id] AS [userId], [u].[name] AS [userName], [o].[amount] AS [orderAmount]
+    expect(sql)
+      .toEqual(`SELECT [u].[id] AS [userId], [u].[name] AS [userName], [o].[amount] AS [orderAmount]
 FROM [users] AS [u]
 INNER JOIN [orders] AS [o] ON ([u].[id] = [o].[userId])`);
   });

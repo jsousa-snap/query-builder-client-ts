@@ -24,8 +24,7 @@ describe('Aggregation Queries', () => {
     const query = users.count();
     const sql = query.toQueryString();
 
-    expect(sql).toEqual(`SELECT
-  COUNT(*) AS [count]
+    expect(sql).toEqual(`SELECT COUNT(*) AS [count]
 FROM [users] AS [u]`);
   });
 
@@ -33,8 +32,7 @@ FROM [users] AS [u]`);
     const query = users.count(u => u.id);
     const sql = query.toQueryString();
 
-    expect(sql).toEqual(`SELECT
-  COUNT([u].[id]) AS [count]
+    expect(sql).toEqual(`SELECT COUNT([u].[id]) AS [count]
 FROM [users] AS [u]`);
   });
 
@@ -42,8 +40,7 @@ FROM [users] AS [u]`);
     const query = users.avg(u => u.age);
     const sql = query.toQueryString();
 
-    expect(sql).toEqual(`SELECT
-  AVG([u].[age]) AS [avg]
+    expect(sql).toEqual(`SELECT AVG([u].[age]) AS [avg]
 FROM [users] AS [u]`);
   });
 
@@ -51,8 +48,7 @@ FROM [users] AS [u]`);
     const query = users.max(u => u.age);
     const sql = query.toQueryString();
 
-    expect(sql).toEqual(`SELECT
-  MAX([u].[age]) AS [max]
+    expect(sql).toEqual(`SELECT MAX([u].[age]) AS [max]
 FROM [users] AS [u]`);
   });
 
@@ -60,8 +56,7 @@ FROM [users] AS [u]`);
     const query = users.min(u => u.age);
     const sql = query.toQueryString();
 
-    expect(sql).toEqual(`SELECT
-  MIN([u].[age]) AS [min]
+    expect(sql).toEqual(`SELECT MIN([u].[age]) AS [min]
 FROM [users] AS [u]`);
   });
 
@@ -69,8 +64,7 @@ FROM [users] AS [u]`);
     const query = orders.sum(o => o.amount);
     const sql = query.toQueryString();
 
-    expect(sql).toEqual(`SELECT
-  SUM([o].[amount]) AS [sum]
+    expect(sql).toEqual(`SELECT SUM([o].[amount]) AS [sum]
 FROM [orders] AS [o]`);
   });
 
@@ -78,8 +72,7 @@ FROM [orders] AS [o]`);
     const query = users.where(u => u.age > 18).avg(u => u.age);
     const sql = query.toQueryString();
 
-    expect(sql).toEqual(`SELECT
-  AVG([u].[age]) AS [avg]
+    expect(sql).toEqual(`SELECT AVG([u].[age]) AS [avg]
 FROM [users] AS [u]
 WHERE ([u].[age] > 18)`);
   });
@@ -100,8 +93,7 @@ WHERE ([u].[age] > 18)`);
       .avg(joined => joined.order.amount);
     const sql = query.toQueryString();
 
-    expect(sql).toEqual(`SELECT
-  AVG([o].[amount]) AS [avg]
+    expect(sql).toEqual(`SELECT AVG([o].[amount]) AS [avg]
 FROM [users] AS [u]
 INNER JOIN [orders] AS [o] ON ([u].[id] = [o].[userId])
 WHERE (([u].[age] > 18) AND ([o].[amount] > 100))`);

@@ -365,9 +365,6 @@ export class SqlServerGenerationVisitor implements IExpressionVisitor<string> {
     if (projections.length === 0) {
       this.append(' *');
     } else {
-      // For projections, add a newline
-      this.appendLine('');
-
       // Important: Use indentation for projections regardless of current level
       this.indentLevel = this.isSubquery ? originalIndentLevel : 1;
 
@@ -375,7 +372,7 @@ export class SqlServerGenerationVisitor implements IExpressionVisitor<string> {
       const currentIndent = this.getIndent();
 
       // First projection with proper indentation
-      this.append(currentIndent + projections[0].accept(this));
+      this.append(' ' + projections[0].accept(this));
 
       // Subsequent projections
       for (let i = 1; i < projections.length; i++) {

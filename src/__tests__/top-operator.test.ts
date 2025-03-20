@@ -1,5 +1,3 @@
-// src/__tests__/top-operator.test.ts
-
 import { DbContext } from '../core/context/DbContext';
 import { IDatabaseProvider } from '../core/query/Types';
 
@@ -74,8 +72,7 @@ ORDER BY [u].[id] ASC`);
       .toQueryString();
 
     // Assert
-    expect(query).toEqual(`SELECT TOP 3
-  [u].[id] AS [id], [u].[name] AS [name]
+    expect(query).toEqual(`SELECT TOP 3 [u].[id] AS [id], [u].[name] AS [name]
 FROM [users] AS [u]`);
   });
 

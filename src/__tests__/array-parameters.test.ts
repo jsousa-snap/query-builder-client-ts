@@ -2,6 +2,7 @@ import { DbContext } from '../core/context/DbContext';
 import { Order, User } from './common/models';
 import { DbSet } from '../core/context/DbSet';
 import { IDatabaseProvider } from '../core/query/Types';
+import { ExpressionSerializer } from '../utils/ExpressionSerializer';
 
 const mockDatabaseProvider: IDatabaseProvider = {
   queryAsync: jest.fn().mockResolvedValue([{ id: 1, name: 'Alice' }]),
@@ -158,12 +159,13 @@ WHERE [u].[id] IN (1, N'active', 1, NULL)`);
 
     const sql = query.toQueryString();
 
+    const meta = JSON.stringify(ExpressionSerializer.serialize(query.toMetadata()), null, 2);
+
     // Assert - Verifica como lida com tipos misturados
     expect(sql).toEqual(`SELECT *
 FROM [users] AS [u]
 WHERE [u].[id] IN (
-  (SELECT
-    [o].[userId]
+  (SELECT [o].[userId]
     FROM [orders] AS [o]
     WHERE [o].[userId] IN (1, N'active', 1, NULL)))`);
   });
