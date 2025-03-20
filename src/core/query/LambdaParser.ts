@@ -30,6 +30,7 @@ export class LambdaParser {
   private readonly builder: ExpressionBuilder;
   private readonly variables: Record<string, any>;
   private parameterName: string = '';
+  private secondParameterName: string | null = null;
   private readonly propertyTracker?: PropertyTracker;
 
   /**
@@ -115,9 +116,12 @@ export class LambdaParser {
    * @param predicate A função de predicado (por exemplo, x => x.id === 1)
    * @param tableAlias O alias para a tabela
    */
-  parsePredicate<T>(predicate: (entity: T) => boolean, tableAlias: string): Expression {
+  parsePredicate<T, P = Record<string, any>>(
+    predicate: (entity: T, params?: P) => boolean,
+    tableAlias: string,
+  ): Expression {
     const fnString = predicate.toString();
-    this.extractParameterName(fnString);
+    this.extractParameterNames(fnString);
 
     // Analisar o corpo da função em uma AST
     const node = this.parseLambda(fnString);
@@ -717,6 +721,20 @@ export class LambdaParser {
       return this.builder.createColumn(node.name.text, tableAlias);
     }
 
+    if (this.secondParameterName && propPath[0] === this.secondParameterName) {
+      // It's a reference to the second parameter (e.g., params.age)
+      const propertyName = propPath[1];
+
+      if (propertyName in this.variables) {
+        // Convert to a constant expression with the value from variables
+        return this.builder.createConstant(this.variables[propertyName]);
+      }
+
+      // If property not found in variables, warn and return null
+      console.warn(`Reference to parameter '${propertyName}' not found in variables`);
+      return this.builder.createConstant(null);
+    }
+
     // Get the full path as a string for property tracker lookups
     const fullPropertyPath = propPath.join('.');
 
@@ -834,6 +852,13 @@ export class LambdaParser {
       return this.builder.createConstant(`${tableAlias}`);
     }
 
+    // Verificar se é o segundo parâmetro (embora isso seja raro sem acesso a propriedade)
+    if (this.secondParameterName && name === this.secondParameterName) {
+      // Isso seria uma referência ao objeto params inteiro
+      // Não é comum, mas retornamos uma constante representando o objeto
+      return this.builder.createConstant(this.variables);
+    }
+
     // Verificar se é uma variável de contexto
     if (name in this.variables) {
       // É uma variável, retornar seu valor
@@ -887,6 +912,40 @@ export class LambdaParser {
   }
 
   /**
+   * Verifica se uma expressão é uma referência a uma propriedade do objeto de parâmetros
+   * Exemplo: params.allowedStatuses
+   */
+  private isParameterArrayReference(expr: ts.Expression): boolean {
+    if (ts.isPropertyAccessExpression(expr)) {
+      // Verificar se o objeto base é o parâmetro
+      if (
+        ts.isIdentifier(expr.expression) &&
+        this.secondParameterName &&
+        expr.expression.text === this.secondParameterName
+      ) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  /**
+   * Extrai o nome da propriedade de uma expressão de acesso a propriedade de parâmetro
+   * Exemplo: params.allowedStatuses => 'allowedStatuses'
+   */
+  private extractParamPropertyName(expr: ts.Expression): string | null {
+    if (
+      ts.isPropertyAccessExpression(expr) &&
+      ts.isIdentifier(expr.expression) &&
+      this.secondParameterName &&
+      expr.expression.text === this.secondParameterName
+    ) {
+      return expr.name.text;
+    }
+    return null;
+  }
+
+  /**
    * Processa uma expressão de chamada
    * @param node O nó de expressão de chamada
    * @param tableAlias O alias para a tabela
@@ -900,6 +959,27 @@ export class LambdaParser {
 
       // Lidar com string.includes() -> LIKE
       if (method === 'includes' && args.length === 1) {
+        // Verificar se estamos lidando com uma expressão de parâmetro
+        // Exemplo: params.allowedStatuses.includes(user.status)
+        if (this.isParameterArrayReference(node.expression.expression)) {
+          // Obter o nome da propriedade do parâmetro (ex: 'allowedStatuses')
+          const paramPropName = this.extractParamPropertyName(node.expression.expression);
+
+          if (
+            paramPropName &&
+            paramPropName in this.variables &&
+            Array.isArray(this.variables[paramPropName])
+          ) {
+            // Estamos lidando com um array nos parâmetros
+            // Inverter a ordem: args[0] IN (array values)
+            return this.builder.createBinary(
+              ExpressionType.In,
+              args[0], // O valor a verificar (ex: user.status)
+              this.builder.createConstant(this.variables[paramPropName]), // O array de valores
+            );
+          }
+        }
+
         // Converter para SQL LIKE
         const pattern = this.builder.createFunction('CONCAT', [
           this.builder.createConstant('%'),
@@ -1126,9 +1206,12 @@ export class LambdaParser {
   /**
    * Analisa um predicado com suporte a propriedades aninhadas
    */
-  parsePredicateWithNesting<T>(predicate: (entity: T) => boolean, tableAlias: string): Expression {
+  parsePredicateWithNesting<T, P = Record<string, any>>(
+    predicate: (entity: T, params?: P) => boolean,
+    tableAlias: string,
+  ): Expression {
     const fnString = predicate.toString();
-    this.extractParameterName(fnString);
+    this.extractParameterNames(fnString);
 
     // Parse the function body into an AST
     const node = this.parseLambda(fnString);
@@ -1190,22 +1273,56 @@ export class LambdaParser {
       // Handle method calls on properties
       if (ts.isPropertyAccessExpression(node.expression)) {
         const method = node.expression.name.text;
-        const object = this.processPropertyWithNesting(node.expression.expression, tableAlias);
-        const args = node.arguments.map(arg => this.processPropertyWithNesting(arg, tableAlias));
 
-        // Special handling for string methods
-        if (method === 'includes' && args.length === 1) {
-          // Convert to SQL LIKE
+        // CORREÇÃO: Caso especial para método includes()
+        if (method === 'includes' && node.arguments.length === 1) {
+          // Verificar se estamos lidando com um array em um parâmetro
+          // Ex: params.allowedStatuses.includes(user.status)
+
+          const objectExpr = node.expression.expression; // Ex: params.allowedStatuses
+
+          // Verificar se o objeto é uma propriedade de parâmetro
+          if (
+            ts.isPropertyAccessExpression(objectExpr) &&
+            ts.isIdentifier(objectExpr.expression) &&
+            this.secondParameterName &&
+            objectExpr.expression.text === this.secondParameterName
+          ) {
+            // Obtemos o nome da propriedade do parâmetro
+            const paramProperty = objectExpr.name.text; // Ex: allowedStatuses
+
+            // Verificamos se existe no objeto de variáveis e é um array
+            if (paramProperty in this.variables && Array.isArray(this.variables[paramProperty])) {
+              // O valor a ser verificado (o argumento do includes)
+              const valueToCheck = this.processPropertyWithNesting(node.arguments[0], tableAlias);
+
+              // Criamos uma expressão IN
+              return this.builder.createBinary(
+                ExpressionType.In,
+                valueToCheck, // Ex: user.status
+                this.builder.createConstant(this.variables[paramProperty]), // O array
+              );
+            }
+          }
+
+          // Caso de string.includes() - Processar normalmente como LIKE
+          const object = this.processPropertyWithNesting(node.expression.expression, tableAlias);
+          const arg = this.processPropertyWithNesting(node.arguments[0], tableAlias);
+
+          // Converter para SQL LIKE
           const pattern = this.builder.createFunction('CONCAT', [
             this.builder.createConstant('%'),
-            args[0],
+            arg,
             this.builder.createConstant('%'),
           ]);
 
           return this.builder.createFunction('LIKE', [object, pattern]);
         }
 
-        // Default: convert to function call
+        // Caso para outros métodos
+        const object = this.processPropertyWithNesting(node.expression.expression, tableAlias);
+        const args = node.arguments.map(arg => this.processPropertyWithNesting(arg, tableAlias));
+
         return this.builder.createFunction(method, [object, ...args]);
       }
 
@@ -1233,6 +1350,21 @@ export class LambdaParser {
     if (ts.isPropertyAccessExpression(node)) {
       // Extract the full property path
       const propPath = this.extractPropertyPath(node);
+
+      if (
+        this.secondParameterName &&
+        propPath.length >= 2 &&
+        propPath[0] === this.secondParameterName
+      ) {
+        const propertyName = propPath[1];
+
+        if (propertyName in this.variables) {
+          return this.builder.createConstant(this.variables[propertyName]);
+        }
+
+        console.warn(`Reference to parameter '${propertyName}' not found in variables`);
+        return this.builder.createConstant(null);
+      }
 
       // If we have a nested property (at least 3 parts: parameter.object.property)
       if (propPath.length >= 3 && propPath[0] === this.parameterName) {
@@ -1455,5 +1587,38 @@ export class LambdaParser {
 
     // Para outros tipos, delegar para o método processNode genérico
     return this.processNode(node, tableAlias);
+  }
+
+  /**
+   * Extrai os nomes dos parâmetros de uma string de função lambda
+   * @param fnString A string da função
+   */
+  private extractParameterNames(fnString: string): void {
+    // Corresponder padrões para um ou dois parâmetros:
+    // 1. Função de seta com dois parâmetros: (x, params) => ...
+    // 2. Função de seta com um parâmetro: x => ... ou (x) => ...
+
+    // Tentar primeiro capturar dois parâmetros
+    const twoParamsMatch = fnString.match(/\(\s*([^,]+)\s*,\s*([^)]+)\s*\)\s*=>/);
+
+    if (twoParamsMatch) {
+      // Capturamos dois parâmetros: (entity, params) => ...
+      this.parameterName = twoParamsMatch[1].trim();
+      this.secondParameterName = twoParamsMatch[2].trim();
+      return;
+    }
+
+    // Tentar capturar um único parâmetro
+    const oneParamMatch = fnString.match(/\(\s*([^)]*)\s*\)\s*=>|\s*(\w+)\s*=>/);
+
+    if (oneParamMatch) {
+      // Usar o nome do parâmetro capturado
+      this.parameterName = (oneParamMatch[1] || oneParamMatch[2]).trim();
+      this.secondParameterName = null; // Não há segundo parâmetro
+    } else {
+      // Nome de parâmetro padrão se não pudermos extraí-lo
+      this.parameterName = 'entity';
+      this.secondParameterName = null;
+    }
   }
 }

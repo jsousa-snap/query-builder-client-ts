@@ -11,7 +11,7 @@ export interface IQueryWhereExtensions<T> {
    * Adds a WHERE clause to the query
    * @param predicate The predicate function
    */
-  where(predicate: PredicateFunction<T>): Queryable<T>;
+  where<P = Record<string, any>>(predicate: (entity: T, params: P) => boolean): Queryable<T>;
 
   /**
    * Adds a WHERE IN condition with a subquery

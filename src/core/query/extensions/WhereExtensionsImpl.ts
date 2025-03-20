@@ -11,7 +11,7 @@ import { IQueryWhereExtensions } from './WhereExtensionsInterface';
 export class WhereExtensions<T> implements IQueryWhereExtensions<T> {
   constructor(private queryable: Queryable<T>) {}
 
-  where(predicate: PredicateFunction<T>): Queryable<T> {
+  where<P = Record<string, any>>(predicate: (entity: T, params: P) => boolean): Queryable<T> {
     // Create a new queryable
     const newQueryable = this.queryable.clone();
 
@@ -24,7 +24,7 @@ export class WhereExtensions<T> implements IQueryWhereExtensions<T> {
       );
 
       // Attempt to parse with enhanced nested property support
-      const predicateExpr = enhancedParser.parsePredicateWithNesting<T>(
+      const predicateExpr = enhancedParser.parsePredicateWithNesting<T, P>(
         predicate,
         this.queryable.alias,
       );
@@ -45,7 +45,7 @@ export class WhereExtensions<T> implements IQueryWhereExtensions<T> {
       );
 
       // Fallback to standard parsing method
-      const predicateExpr = this.queryable.lambdaParser.parsePredicate<T>(
+      const predicateExpr = this.queryable.lambdaParser.parsePredicate<T, P>(
         predicate,
         this.queryable.alias,
       );
@@ -62,7 +62,6 @@ export class WhereExtensions<T> implements IQueryWhereExtensions<T> {
 
     return newQueryable;
   }
-
   whereIn<U>(selector: (entity: T) => any, subquery: Queryable<U>): Queryable<T> {
     // Create a new queryable
     const newQueryable = this.queryable.clone();

@@ -202,6 +202,22 @@ export class SqlServerGenerationVisitor implements IExpressionVisitor<string> {
       return `CONVERT(DATETIME2, '${value.toISOString()}', 126)`;
     }
 
+    // Novo: suporte para arrays
+    if (Array.isArray(value)) {
+      // Converte cada elemento do array para o formato SQL e junta com vírgulas
+      const sqlValues = value.map(item => {
+        if (item === null) return 'NULL';
+        if (typeof item === 'string') return `N'${this.escapeSqlString(item)}'`;
+        if (typeof item === 'boolean') return item ? '1' : '0';
+        if (item instanceof Date) return `CONVERT(DATETIME2, '${item.toISOString()}', 126)`;
+        return String(item);
+      });
+
+      // Retorna os valores separados por vírgulas
+      // Não inclui parênteses aqui, pois serão adicionados pelo operador IN
+      return sqlValues.join(', ');
+    }
+
     return String(value);
   }
 

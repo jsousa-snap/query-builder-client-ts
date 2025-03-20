@@ -8,6 +8,8 @@ export interface User {
   age: number;
   isActive: boolean;
   createdAt: Date;
+  status: string;
+  role: string;
 }
 
 /**

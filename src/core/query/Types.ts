@@ -20,9 +20,9 @@ export enum OrderDirection {
 }
 
 /**
- * Function type for WHERE clauses
+ * Function type for WHERE clauses with optional parameters
  */
-export type PredicateFunction<T> = (entity: T) => boolean;
+export type PredicateFunction<T, P = Record<string, any>> = (entity: T, params?: P) => boolean;
 
 /**
  * Function type for SELECT projections
