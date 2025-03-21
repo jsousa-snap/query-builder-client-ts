@@ -1,6 +1,5 @@
 const mockDatabaseProvider: IDatabaseProvider = {
-  queryAsync: jest.fn().mockResolvedValue([{ id: 1, name: 'Alice' }]),
-  firstAsync: jest.fn().mockResolvedValue({ id: 1, name: 'Alice' }),
+  execAsync: jest.fn().mockResolvedValue([{ id: 1, name: 'Alice' }]),
 };
 
 import { Queryable } from '../core/query/Queryable';
@@ -16,14 +15,8 @@ describe('Teste com mock de IDatabaseProvider', () => {
   });
 
   test('toListAsync deve retornar registros', async () => {
-    const result = await queryable.toListAsync();
+    const result = await queryable.execAsync();
     expect(result).toEqual([{ id: 1, name: 'Alice' }]);
-    expect(mockDatabaseProvider.queryAsync).toHaveBeenCalled();
-  });
-
-  test('firstAsync deve retornar o primeiro registro', async () => {
-    const result = await queryable.firstAsync();
-    expect(result).toEqual({ id: 1, name: 'Alice' });
-    expect(mockDatabaseProvider.firstAsync).toHaveBeenCalled();
+    expect(mockDatabaseProvider.execAsync).toHaveBeenCalled();
   });
 });

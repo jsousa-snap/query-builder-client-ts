@@ -566,6 +566,5 @@ export class Queryable<T>
   /**
    * Methods from ExecutionExtensions
    */
-  toListAsync!: IQueryExecutionExtensions<T>['toListAsync'];
-  firstAsync!: IQueryExecutionExtensions<T>['firstAsync'];
+  execAsync!: IQueryExecutionExtensions<T>['execAsync'];
 }

@@ -8,14 +8,9 @@ import { IQueryExecutionExtensions } from './ExecutionExtensionsInterface';
 export class ExecutionExtensions<T> implements IQueryExecutionExtensions<T> {
   constructor(private queryable: Queryable<T>) {}
 
-  async toListAsync(): Promise<Record<string, any>[]> {
+  async execAsync(): Promise<any> {
     const metadata = ExpressionSerializer.serialize(this.queryable.toMetadata());
-    return await this.queryable.provider.queryAsync(metadata);
-  }
-
-  async firstAsync(): Promise<Record<string, any> | null> {
-    const metadata = ExpressionSerializer.serialize(this.queryable.toMetadata());
-    return await this.queryable.provider.firstAsync(metadata);
+    return await this.queryable.provider.execAsync(metadata);
   }
 }
 
@@ -26,6 +21,5 @@ export function applyExecutionExtensions<T>(queryable: Queryable<T>): void {
   const extensions = new ExecutionExtensions(queryable);
 
   // Assign all methods from the extensions to the queryable
-  queryable.toListAsync = extensions.toListAsync.bind(extensions);
-  queryable.firstAsync = extensions.firstAsync.bind(extensions);
+  queryable.execAsync = extensions.execAsync.bind(extensions);
 }

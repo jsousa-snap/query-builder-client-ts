@@ -7,8 +7,7 @@ import { Expression } from '../expressions/Expression';
 import { Queryable } from './Queryable';
 
 export interface IDatabaseProvider {
-  queryAsync(metadata: ExpressionJson): Promise<Record<string, any>[]>;
-  firstAsync(metadata: ExpressionJson): Promise<Record<string, any> | null>;
+  execAsync(metadata: ExpressionJson): Promise<any>;
 }
 
 /**

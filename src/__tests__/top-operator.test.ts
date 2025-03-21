@@ -3,8 +3,7 @@ import { IDatabaseProvider, OrderDirection } from '../core/query/Types';
 import { ExpressionSerializer } from '../utils/ExpressionSerializer';
 
 const mockDatabaseProvider: IDatabaseProvider = {
-  queryAsync: jest.fn().mockResolvedValue([{ id: 1, name: 'Alice' }]),
-  firstAsync: jest.fn().mockResolvedValue({ id: 1, name: 'Alice' }),
+  execAsync: jest.fn().mockResolvedValue([{ id: 1, name: 'Alice' }]),
 };
 
 /**

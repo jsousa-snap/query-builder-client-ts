@@ -5,8 +5,7 @@ import { IDatabaseProvider, OrderDirection } from '../core/query/Types';
 import { DbSet } from '../core/context/DbSet';
 
 const mockDatabaseProvider: IDatabaseProvider = {
-  queryAsync: jest.fn().mockResolvedValue([{ id: 1, name: 'Alice' }]),
-  firstAsync: jest.fn().mockResolvedValue({ id: 1, name: 'Alice' }),
+  execAsync: jest.fn().mockResolvedValue([{ id: 1, name: 'Alice' }]),
 };
 
 describe('Order By Queries', () => {

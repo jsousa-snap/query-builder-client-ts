@@ -4,8 +4,7 @@ import { DbSet } from '../core/context/DbSet';
 import { IDatabaseProvider } from '../core/query/Types';
 
 const mockDatabaseProvider: IDatabaseProvider = {
-  queryAsync: jest.fn().mockResolvedValue([{ id: 1, name: 'Alice' }]),
-  firstAsync: jest.fn().mockResolvedValue({ id: 1, name: 'Alice' }),
+  execAsync: jest.fn().mockResolvedValue([{ id: 1, name: 'Alice' }]),
 };
 
 describe('Subquery Queries', () => {

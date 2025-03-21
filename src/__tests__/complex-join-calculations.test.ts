@@ -33,7 +33,7 @@ interface Product {
 
 // Mock do provedor de banco de dados
 const mockDatabaseProvider: IDatabaseProvider = {
-  queryAsync: jest.fn().mockResolvedValue([
+  execAsync: jest.fn().mockResolvedValue([
     {
       userName: 'John Doe',
       productName: 'Laptop',
@@ -41,12 +41,6 @@ const mockDatabaseProvider: IDatabaseProvider = {
       total: 2000,
     },
   ]),
-  firstAsync: jest.fn().mockResolvedValue({
-    userName: 'John Doe',
-    productName: 'Laptop',
-    quantity: 2,
-    total: 2000,
-  }),
 };
 
 describe('Complex Join Calculations Tests', () => {
@@ -108,9 +102,9 @@ INNER JOIN [order_items] AS [o1] ON ([o].[id] = [o1].[orderId])
 INNER JOIN [products] AS [p] ON ([o1].[productId] = [p].[id])`);
 
     // Testar a execução da consulta
-    return query.toListAsync().then(results => {
+    return query.execAsync().then(results => {
       // Verificar se o método queryAsync foi chamado
-      expect(mockDatabaseProvider.queryAsync).toHaveBeenCalled();
+      expect(mockDatabaseProvider.execAsync).toHaveBeenCalled();
 
       // Verificar se os resultados foram processados corretamente
       expect(results).toHaveLength(1);
