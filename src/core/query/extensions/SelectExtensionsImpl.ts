@@ -1,5 +1,6 @@
 import { DbSet } from '../../context/DbSet';
 import { ColumnExpression } from '../../expressions/ColumnExpression';
+import { FunctionExpression } from '../../expressions/FunctionExpression';
 import { ScalarSubqueryExpression } from '../../expressions/ScalarSubqueryExpression';
 import { LambdaParser } from '../LambdaParser';
 import { Queryable } from '../Queryable';
@@ -43,10 +44,26 @@ export class SelectExtensions<T> implements IQuerySelectExtensions<T> {
         // It's a simple expression (user => user.id or _ => 1)
         const expression = lambdaParser.processSimpleExpression(node, this.queryable.alias);
 
-        // Create a single projection with alias "value"
-        newQueryable.projections = [
-          this.queryable.expressionBuilder.createProjection(expression, null),
-        ];
+        if (expression instanceof FunctionExpression) {
+          const args = expression.getArguments();
+          const columnArg = args.find(arg => arg instanceof ColumnExpression) as ColumnExpression;
+          if (columnArg) {
+            newQueryable.projections = [
+              this.queryable.expressionBuilder.createProjection(
+                expression,
+                columnArg.getColumnName(),
+              ),
+            ];
+          } else {
+            newQueryable.projections = [
+              this.queryable.expressionBuilder.createProjection(expression, null),
+            ];
+          }
+        } else {
+          newQueryable.projections = [
+            this.queryable.expressionBuilder.createProjection(expression, null),
+          ];
+        }
 
         // If it's a column access, register in the tracker
         if (expression instanceof ColumnExpression) {

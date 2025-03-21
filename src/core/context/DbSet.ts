@@ -105,6 +105,14 @@ export class DbSet<T> {
   }
 
   /**
+   * Creates a queryable with an ORDER BY clause DESC
+   * @param selector Function to select the ordering field
+   */
+  orderByDesc(selector: (entity: T) => any): Queryable<T> {
+    return this.query().orderByDesc(selector);
+  }
+
+  /**
    * Creates a queryable with a GROUP BY clause
    * @param selector Function to select the grouping fields
    */

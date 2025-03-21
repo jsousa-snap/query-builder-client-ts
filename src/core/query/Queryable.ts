@@ -524,6 +524,7 @@ export class Queryable<T>
    * Methods from OrderByExtensions
    */
   orderBy!: IQueryOrderByExtensions<T>['orderBy'];
+  orderByDesc!: IQueryOrderByExtensions<T>['orderByDesc'];
   orderByCount!: IQueryOrderByExtensions<T>['orderByCount'];
   orderByAvg!: IQueryOrderByExtensions<T>['orderByAvg'];
   orderBySum!: IQueryOrderByExtensions<T>['orderBySum'];

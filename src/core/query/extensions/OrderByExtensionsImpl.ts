@@ -38,6 +38,29 @@ export class OrderByExtensions<T> implements IQueryOrderByExtensions<T> {
     return newQueryable;
   }
 
+  orderByDesc(selector: OrderBySelector<T>): Queryable<T> {
+    // Create a new queryable
+    const newQueryable = this.queryable.clone();
+
+    // Use the enhanced LambdaParser to correctly handle nested properties
+    const enhancedParser = new LambdaParser(
+      this.queryable.expressionBuilder,
+      this.queryable.contextVariables,
+      this.queryable.getPropertyTracker(),
+    );
+
+    // Parse the selector with nested property support
+    const column = enhancedParser.parseAggregationSelector<T>(selector, this.queryable.alias);
+
+    // Create the ORDER BY expression
+    const orderByExpr = this.queryable.expressionBuilder.createOrderBy(column, false);
+
+    // Add the ORDER BY to the query
+    newQueryable.orderByColumns.push(orderByExpr);
+
+    return newQueryable;
+  }
+
   orderByCount(direction: OrderDirection = OrderDirection.ASC): Queryable<T> {
     // Create a new queryable
     const newQueryable = this.queryable.clone();
@@ -250,6 +273,7 @@ export function applyOrderByExtensions<T>(queryable: Queryable<T>): void {
 
   // Assign all methods from the extensions to the queryable
   queryable.orderBy = extensions.orderBy.bind(extensions);
+  queryable.orderByDesc = extensions.orderByDesc.bind(extensions);
   queryable.orderByCount = extensions.orderByCount.bind(extensions);
   queryable.orderByAvg = extensions.orderByAvg.bind(extensions);
   queryable.orderBySum = extensions.orderBySum.bind(extensions);

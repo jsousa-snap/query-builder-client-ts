@@ -13,6 +13,12 @@ export interface IQueryOrderByExtensions<T> {
   orderBy(selector: OrderBySelector<T>, direction?: OrderDirection): Queryable<T>;
 
   /**
+   * Adds an ORDER BY clause DESC to the query
+   * @param selector Function to select the ordering field
+   */
+  orderByDesc(selector: OrderBySelector<T>): Queryable<T>;
+
+  /**
    * Orders results by the count of records in each group
    * @param direction The sort direction
    */

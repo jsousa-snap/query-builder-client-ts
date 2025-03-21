@@ -1,5 +1,6 @@
 import { DbContext } from '../core/context/DbContext';
-import { IDatabaseProvider } from '../core/query/Types';
+import { IDatabaseProvider, OrderDirection } from '../core/query/Types';
+import { ExpressionSerializer } from '../utils/ExpressionSerializer';
 
 const mockDatabaseProvider: IDatabaseProvider = {
   queryAsync: jest.fn().mockResolvedValue([{ id: 1, name: 'Alice' }]),
@@ -26,6 +27,26 @@ describe('Operador TOP', () => {
   beforeEach(() => {
     // Cria um contexto novo para cada teste
     dbContext = new DbContext(mockDatabaseProvider);
+  });
+
+  test('top 1 deve adicionar cláusula TOP à consulta', () => {
+    // Arrange
+    const users = dbContext.set('ADCA98');
+
+    // Act
+    const query = users
+      .orderByDesc(user => user.nome)
+      .select(user => user.nome.trim())
+      .limit(1);
+
+    const sql = query.toQueryString();
+
+    const metadata = JSON.stringify(ExpressionSerializer.serialize(query.toMetadata()), null, 2);
+
+    // Assert
+    expect(sql).toEqual(`SELECT TOP 1 LTRIM(RTRIM([a].[nome])) AS [nome]
+FROM [ADCA98] AS [a]
+ORDER BY [a].[nome] DESC`);
   });
 
   test('top() deve adicionar cláusula TOP à consulta', () => {
