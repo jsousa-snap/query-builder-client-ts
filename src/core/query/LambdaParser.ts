@@ -957,6 +957,24 @@ export class LambdaParser {
       const object = this.processNode(node.expression.expression, tableAlias);
       const args = node.arguments.map(arg => this.processNode(arg, tableAlias));
 
+      if (args.length === 0) {
+        switch (method) {
+          case 'trim':
+            // Converter para função SQL TRIM
+            return this.builder.createFunction('TRIM', [object]);
+
+          case 'trimStart':
+          case 'trimLeft':
+            // Converter para função SQL LTRIM
+            return this.builder.createFunction('LTRIM', [object]);
+
+          case 'trimEnd':
+          case 'trimRight':
+            // Converter para função SQL RTRIM
+            return this.builder.createFunction('RTRIM', [object]);
+        }
+      }
+
       // Lidar com string.includes() -> LIKE
       if (method === 'includes' && args.length === 1) {
         // Verificar se estamos lidando com uma expressão de parâmetro
@@ -979,6 +997,8 @@ export class LambdaParser {
             );
           }
         }
+
+        // Lidar com string.includes() -> LIKE
 
         // Converter para SQL LIKE
         const pattern = this.builder.createFunction('CONCAT', [

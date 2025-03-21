@@ -31,13 +31,16 @@ FROM [users] AS [u]`);
   test('Select specific columns', () => {
     const query = users.select(u => ({
       userId: u.id,
-      userName: u.name,
+      nomeLimpo: u.name.trim(),
+      nomeComecaLimpo: u.name.trimStart(),
+      nomeTerminaLimpo: u.name.trimEnd(),
     }));
     const sql = query.toQueryString();
 
     const metadata = JSON.stringify(ExpressionSerializer.serialize(query.toMetadata()), null, 2);
 
-    expect(sql).toEqual(`SELECT [u].[id] AS [userId], [u].[name] AS [userName]
+    expect(sql)
+      .toEqual(`SELECT [u].[id] AS [userId], LTRIM(RTRIM([u].[name])) AS [nomeLimpo], LTRIM([u].[name]) AS [nomeComecaLimpo], RTRIM([u].[name]) AS [nomeTerminaLimpo]
 FROM [users] AS [u]`);
   });
 });
